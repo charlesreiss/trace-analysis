@@ -1,0 +1,132 @@
+// General format notes:
+//   all timestamps are normalized so they can be represented as signed longs,
+//   with values greater than LONG_MAX mapped to LONG_MAX
+
+package edu.berkeley.cs.amplab;
+
+option java_outer_classname = "GoogleTrace";
+
+message Resources {
+  optional float cpus = 1;
+  optional float memory = 2;
+  optional float disk_time = 3;
+  optional float disk_space = 4;
+
+  optional float assigned_memory = 5;
+  optional float unmapped_page_cache_memory = 6;
+  optional float page_cache_memory = 7;
+}
+
+message JobInfo {
+  optional string name = 1;
+  optional string logical_name = 2;
+  optional string user_name = 3;
+  optional int32 scheduling_class = 4;
+
+  optional int32 min_priority = 5;
+  optional int32 max_priority = 6;
+}
+
+message MachineAttribute {
+  optional string name = 1;
+  optional string value_as_string = 2;
+  optional int32 value_as_int = 3;
+}
+
+message MachineConstraint {
+  required string name = 1;
+  enum Type {
+    EQUAL = 0; NOT_EQUAL = 1;
+    LESS_THAN = 2; GREATER_THAN = 3;
+  };
+  required Type type = 2;
+  optional int32 compare_number = 3;
+  optional string compare_string = 4;
+}
+
+message TaskInfo {
+  optional int32 priority = 1;
+  optional int32 scheduling_class = 2;
+
+  optional int64 last_submit_time = 3;
+  optional int64 last_schedule_time = 4;
+  optional int64 last_deschedule_time = 5;
+
+  repeated MachineConstraint constraints = 6;
+  optional Resources requested_resources = 7;
+  optional bool different_machines = 8;
+}
+
+message MachineInfo {
+  required Resources capacity = 1;
+  repeated MachineAttribute attributes = 2;
+
+  optional string platform_id = 3;
+
+  optional int64 last_down_time = 4;
+  optional int64 last_up_time = 5;
+}
+
+message TaskUsage {
+  required int64 start_time = 1;
+  required int64 end_time = 2;
+  required int64 job_id = 3;
+  required int64 task_index = 4;
+  required int64 machine_id = 5;
+  
+  // These messages are required; the presence of fields within them is not.
+  required Resources resources = 6;
+  required Resources max_resources = 7;
+
+  optional float cycles_per_instruction = 8;
+  optional float memory_access_per_instruction = 9;
+
+  // denormalized information to aid analysis. These should be obtained from the
+  // first record before start_time in the raw data, unless that is incomplete.
+  optional JobInfo job_info = 10;
+  optional TaskInfo task_info = 11;
+  optional MachineInfo machine_info = 12;
+}
+
+enum MissingType {
+  SNAPSHOT_BUT_NO_TRANSITION = 0;
+  NO_SNAPSHOT_OR_TRANSITION = 1;
+  EXISTS_BUT_NO_CREATION = 2;
+}
+
+message TaskEvent {
+  enum Type {
+    SUBMIT = 0;
+    SCHEDULE = 1;
+    EVICT = 2;
+    FAIL = 3;
+    FINISH = 4;
+    KILL = 5;
+    LOST = 6;
+    UPDATE_PENDING = 7;
+    UPDATE_RUNNING = 8;
+  };
+  required int64 time = 1;
+  optional MissingType missing_type = 2;
+  required int64 job_id = 3;
+  required int64 task_index = 4;
+  
+  required Type type = 5;
+  required TaskInfo info = 6;
+  required JobInfo job_info = 7;
+}
+
+message JobEvent {
+  required int64 time = 1;
+  optional MissingType missing_type = 2;
+  required int64 job_id = 3;
+
+  required JobInfo info = 4;
+}
+
+message MachineEvent {
+  required int64 time = 1;
+  required int64 machine_id = 2;
+  optional bool up = 3;
+  required MachineInfo info = 4;
+}
