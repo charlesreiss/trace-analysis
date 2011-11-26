@@ -79,13 +79,16 @@ message TaskUsage {
   required Resources max_resources = 7;
 
   optional float cycles_per_instruction = 8;
-  optional float memory_access_per_instruction = 9;
+  optional float memory_accesses_per_instruction = 9;
+
+  optional float sample_portion = 10;
+  optional bool aggregation_type = 11;
 
   // denormalized information to aid analysis. These should be obtained from the
   // first record before start_time in the raw data, unless that is incomplete.
-  optional JobInfo job_info = 10;
-  optional TaskInfo task_info = 11;
-  optional MachineInfo machine_info = 12;
+  optional JobInfo job_info = 12;
+  optional TaskInfo task_info = 13;
+  optional MachineInfo machine_info = 14;
 }
 
 enum MissingType {

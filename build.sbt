@@ -8,6 +8,8 @@ version := "1.0"
 
 scalaVersion := "2.9.1"
 
+scalacOptions := Seq("-deprecation", "-unchecked", "-optimise")
+
 organization := "edu.berkeley.cs.amplab"
 
 resolvers += "Apache Snapshots" at "https://repository.apache.org/content/repositories/snapshots"
@@ -15,7 +17,8 @@ resolvers += "Apache Snapshots" at "https://repository.apache.org/content/reposi
 libraryDependencies ++= Seq(
   "org.apache.hadoop" % "hadoop-core" % "0.20.205.0",
   "org.apache.hive" % "hive-serde" % "0.7.1-SNAPSHOT",
-  "log4j" % "log4j" % "1.2.16"
+  "log4j" % "log4j" % "1.2.16",
+  "org.spark-project" %% "spark-core" % "0.4-SNAPSHOT"
 )
 
 protoc in PB.protobufConfig := "protoc --plugin=protoc-gen-twadoop=./protoc-gen-twadoop --twadoop_out=target/scala-2.9.1/src_managed/main/compiled_protobuf"
