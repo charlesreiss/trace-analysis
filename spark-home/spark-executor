@@ -1,0 +1,8 @@
+#!/bin/sh
+BASEDIR=`dirname $0`
+cd $BASEDIR/..
+export SPARK_MEM=2500m
+mkdir -p /scratch/charles
+export TMPDIR=/scratch/charles
+export PATH=/home/eecs/charles/scala-2.9.1.final/bin:$PATH
+exec target/scala-sbt spark.Executor
