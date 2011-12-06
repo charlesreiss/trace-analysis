@@ -1,0 +1,180 @@
+import edu.berkeley.cs.amplab.Convert._
+import edu.berkeley.cs.amplab.GoogleTrace._
+import spark.RDD
+import spark.SparkContext
+
+import edu.berkeley.cs.amplab.mapreduce.input._
+import edu.berkeley.cs.amplab.mapreduce.output._
+import com.twitter.elephantbird.mapreduce.io.ProtobufWritable
+import org.apache.hadoop.io.LongWritable
+
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.{InputFormat, Job}
+import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat}
+
+import org.apache.hadoop.conf.Configuration
+
+import org.apache.hadoop.io.compress.CompressionCodecFactory
+
+def _getSavedTasks(sc: SparkContext, inFile: String): RDD[TaskEvent] = 
+  inLzo[LongWritable, ProtobufWritable[TaskEvent],
+        LzoTaskEventProtobufBlockInputFormat](sc, inFile).
+  map(kv => kv._2.get)
+
+
+def _getSavedUsage(sc: SparkContext, inFile: String): RDD[TaskUsage] = 
+  inLzo[LongWritable, ProtobufWritable[TaskUsage],
+        LzoTaskUsageProtobufBlockInputFormat](sc, inFile).
+  map(kv => kv._2.get)
+
+def _getSavedMachines(sc: SparkContext, inFile: String): RDD[MachineEvent] = 
+  inLzo[LongWritable, ProtobufWritable[MachineEvent],
+        LzoMachineEventProtobufBlockInputFormat](sc, inFile).
+  map(kv => kv._2.get)
+
+def sampleMachinesFromUsage(rate: Int, data: RDD[TaskUsage]): RDD[TaskUsage] =
+  data.filter(_.getMachineInfo.getId % rate == 0)
+
+def sampleMachinesFromTasks(rate: Int, data: RDD[TaskEvent]): RDD[TaskEvent] =
+  data.filter(task =>
+    task.hasMachineInfo && task.getMachineInfo.getId % rate == 0)
+
+def sampleMachinesFromMachines(rate: Int, data: RDD[MachineEvent]): RDD[MachineEvent] = 
+  data.filter(m => m.getInfo.getId % rate == 0)
+
+/*
+def takeSchedules(t: TaskEvent): Boolean = t.getType == TaskEventType.SCHEDULE
+
+def takeTerms(t: TaskEvent): Boolean = ( t.getType == TaskEventType.FINISH ||
+    t.getType == TaskEventType.LOST || t.getType == TaskEventType.KILL)
+
+def latest(t: TaskEvent, u: TaskEvent): TaskEvent = if (t.getTime < u.getTime) u else t
+
+def earliest(t: TaskEvent, u: TaskEvent): TaskEvent = if (t.getTime < u.getTime) t else u
+
+type TaskKey = (Long, Int)
+
+def schedOf(d: RDD[(TaskKey, TaskEvent)]) =
+  d.filter(x => takeSchedules(x._2)).reduceByKey(earliest)
+
+def lSchedOf(d: RDD[(TaskKey, TaskEvent)]) =
+  d.filter(x => takeSchedules(x._2)).reduceByKey(latest)
+
+def termOf(d: RDD[(TaskKey, TaskEvent)]) =
+  d.filter(x => takeTerms(x._2)).reduceByKey(latest)
+
+def duration(start: TaskEvent, end: TaskEvent): Long = end.getTime - start.getTime
+
+def getJobs(sc: SparkContext): RDD[JobEvent] =
+  in(sc, convertJobEvent, inDir + "/job_events", true).cache
+  */
+
+val jobs = in(sc, convertJobEvent, inDir + "/job_events", true)
+val tasks = _getSavedTasks(sc, outSan + "/tasks")
+val usage = _getSavedUsage(sc, outSan + "/usage")
+val machines = _getSavedMachines(sc, outSan + "/machine_events")
+
+val tasksB = placeJoined(tasks, jobs)
+val tasksC = placeJoined(tasks, machines)
+
+putTasks(sc, tasksC, outSan + "/all_tasks")
+
+val usageB = placeJoined(usage, tasksC)
+
+putUsage(sc, usageB, outSan + "/all_usage")
+
+val RATE = 29
+
+def writeSamples: (RDD[TaskEvent], RDD[TaskUsage]) = {
+  val usageSample = sampleMachinesFromUsage(RATE, usage)
+  val tasksSample = sampleMachinesFromTasks(RATE, tasks)
+  val machinesSample = sampleMachinesFromMachines(RATE, machines).cache
+
+  val tasksWithMachinesSample = placeJoined(tasksSample, machinesSample).cache
+  val usageWithTasksSample = placeJoined(usageSample, tasksSample)
+  val usageWithMachinesSample = placeJoined(usageWithTasksSample, machinesSample).cache
+
+  putTasks(sc, tasksWithMachinesSample, outSan + "/sample" + RATE + "_tasks")
+  putUsage(sc, usageWithMachinesSample, outSan + "/sample" + RATE + "_usage")
+
+  (tasksWithMachinesSample, usageWithMachinesSample)
+}
+
+def readSamples: (RDD[TaskEvent], RDD[TaskUsage]) = {
+  val tasksWithMachinesSample =
+    _getSavedTasks(sc, outSan + "/sample" + RATE + "_tasks").cache
+  val usageWithMachinesSample =
+    _getSavedUsage(sc, outSan + "/sample" + RATE + "_usage").cache
+  
+  (tasksWithMachinesSample, usageWithMachinesSample)
+}
+
+def normalizeTime(t: Long): Long =
+  t / (300 * 1000L * 1000L)
+
+def keyUsageByMT(usage: TaskUsage): ((Long, Long), TaskUsage) = 
+  (usage.getMachineInfo.getId, normalizeTime(usage.getStartTime)) -> usage
+
+def accumulateUsage(usage: Seq[TaskUsage]): Resources = {
+  def usageKey(u: TaskUsage): (Long, Int) =
+    (u.getTaskInfo.getJob.getId, u.getTaskInfo.getTaskIndex)
+  /* TODO: fix the ordering here */
+  val usageByTask = scala.collection.immutable.Map[(Long, Int), TaskUsage](
+    usage.map(u => usageKey(u) -> u): _*
+  )
+  def weight(u: TaskUsage): Double =
+    (u.getEndTime - u.getStartTime) / (300.0 * 1000.0 * 1000.0)
+  var cpu = usage.map(u => u.getResources.getCpus * weight(u)).sum
+  var mem = usageByTask.values.map(u => u.getResources.getMemory).sum
+  Resources.newBuilder.setCpus(cpu.asInstanceOf[Float]).setMemory(mem.asInstanceOf[Float]).build
+}
+
+def toUsageByMachine(usage: Seq[TaskUsage]): UsageByMachine = {
+  import scala.collection.JavaConversions._
+  val startTime = usage.map(_.getStartTime).min
+  val endTime = usage.map(_.getEndTime).max
+  val totalUsage = accumulateUsage(usage)
+  val result = UsageByMachine.newBuilder
+  result.setResources(accumulateUsage(usage)).addAllComponents(usage).
+         setStartTime(startTime).
+         setEndTime(endTime).build
+}
+
+def computeUsageByMachine(usage: RDD[TaskUsage]): RDD[UsageByMachine] = {
+  usage.map(keyUsageByMT).groupByKey.mapValues(toUsageByMachine).
+        map(kv => kv._2)
+}
+
+def writeUsageByMachine(data: RDD[UsageByMachine]): Unit = {
+  out[LzoUsageByMachineProtobufBlockOutputFormat, UsageByMachine](sc, data,
+    outSan + "/sample" + RATE + "_usage_by_machine")
+}
+
+/*
+val tasksByTask = tasks.map(keyByTask)
+
+val scheds = schedOf(tasksByTask)
+val lScheds = lSchedOf(tasksByTask)
+val terms = termOf(tasksByTask)
+
+val runningAtEnd = lScheds.join(terms).filter(
+  kv=> kv._2._1.getTime > kv._2._2.getTime
+).cache
+
+val runningAtBeginning = scheds.filter(_._2.getTime == 0).cache
+
+val schedsMinusEnd = scheds.leftOuterJoin(runningAtEnd).
+  filter(kv => kv._2._2.isEmpty).
+  mapValues(kv => kv._1)
+val schedsMinusBegEnd = schedsMinusEnd.leftOuterJoin(runningAtBeginning).
+  filter(kv => kv._2._2.isEmpty).
+  mapValues(kv => kv._1)
+
+val durationsPlusSamples = schedsMinusBegEnd.join(terms).map(
+  kv => duration(kv._2._1, kv._2._2) -> kv._2._2
+).cache
+
+val durations = durationsPlusSamples.map(_._1)
+*/
+
+// vim: ft=scala
