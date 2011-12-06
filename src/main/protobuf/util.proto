@@ -1,0 +1,39 @@
+// General format notes:
+//   all timestamps are normalized so they can be represented as signed longs,
+//   with values greater than LONG_MAX mapped to LONG_MAX
+
+package edu.berkeley.cs.amplab;
+
+import "trace.proto";
+
+option java_outer_classname = "TraceUtil";
+
+message JobUtilization {
+  required JobInfo job_info = 1;
+  repeated TaskInfo task_samples = 2;
+  optional int32 num_tasks = 3;
+  optional Resources min_request = 4;
+  optional Resources max_request = 5;
+
+  // overall usage
+  optional Resources max_usage = 6;
+  optional Resources max_mean_usage = 7;
+
+  // percentile of percentile per-task usage
+  repeated float task_percentile = 8;
+  repeated float usage_percentile = 9;
+  optional Resources max_percentile_task_usage = 10;
+  optional Resources max_percentile_mean_task_usage = 11;
+}
+
+message TaskUtilization {
+  required TaskInfo info = 1;
+  repeated TaskInfo task_samples = 2;
+  
+  optional Resources min_request = 3;
+  optional Resources max_request = 4;
+  
+  repeated float usage_percentile = 5;
+  optional Resources precentile_task_usage = 6;
+  optional Resources precentile_mean_task_usage = 6;
+}
