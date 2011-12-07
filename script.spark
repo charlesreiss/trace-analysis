@@ -70,34 +70,40 @@ def getJobs(sc: SparkContext): RDD[JobEvent] =
   */
 
 val jobs = in(sc, convertJobEvent, inDir + "/job_events", true)
-val tasks = _getSavedTasks(sc, outSan + "/tasks")
-val usage = _getSavedUsage(sc, outSan + "/usage")
+val tasks = _getSavedTasks(sc, outSan + "/all_tasks")
+val usage = _getSavedUsage(sc, outSan + "/all_usage")
 val machines = _getSavedMachines(sc, outSan + "/machine_events")
 
+/*
 val tasksB = placeJoined(tasks, jobs)
 val tasksC = placeJoined(tasks, machines)
 
 putTasks(sc, tasksC, outSan + "/all_tasks")
 
 val usageB = placeJoined(usage, tasksC)
+*/
 
-putUsage(sc, usageB, outSan + "/all_usage")
+val usageC = broadcastPlaceJoined(usage, machines)
 
-val RATE = 29
+putUsage(sc, usageC, outSan + "/all_usage_w_m")
+
+val RATE = 43
+val SMALL_SPLITS = 100 
+
+def reshard[T](splits: Int, data: RDD[T])(implicit tm: ClassManifest[T]): RDD[T] =
+  data.map(data => data.hashCode -> data).groupByKey(splits).flatMap(_._2)
 
 def writeSamples: (RDD[TaskEvent], RDD[TaskUsage]) = {
-  val usageSample = sampleMachinesFromUsage(RATE, usage)
-  val tasksSample = sampleMachinesFromTasks(RATE, tasks)
+  val usageSample = reshard(SMALL_SPLITS,
+                            sampleMachinesFromUsage(RATE, usage))
+  val tasksSample = reshard(SMALL_SPLITS / 8,
+                            sampleMachinesFromTasks(RATE, tasks))
   val machinesSample = sampleMachinesFromMachines(RATE, machines).cache
 
-  val tasksWithMachinesSample = placeJoined(tasksSample, machinesSample).cache
-  val usageWithTasksSample = placeJoined(usageSample, tasksSample)
-  val usageWithMachinesSample = placeJoined(usageWithTasksSample, machinesSample).cache
+  putTasks(sc, tasksSample, outSan + "/sample" + RATE + "_tasks")
+  putUsage(sc, usageSample, outSan + "/sample" + RATE + "_usage")
 
-  putTasks(sc, tasksWithMachinesSample, outSan + "/sample" + RATE + "_tasks")
-  putUsage(sc, usageWithMachinesSample, outSan + "/sample" + RATE + "_usage")
-
-  (tasksWithMachinesSample, usageWithMachinesSample)
+  (tasksSample, usageSample)
 }
 
 def readSamples: (RDD[TaskEvent], RDD[TaskUsage]) = {
@@ -133,10 +139,12 @@ def toUsageByMachine(usage: Seq[TaskUsage]): UsageByMachine = {
   import scala.collection.JavaConversions._
   val startTime = usage.map(_.getStartTime).min
   val endTime = usage.map(_.getEndTime).max
+  val info = usage.head.getMachineInfo
   val totalUsage = accumulateUsage(usage)
   val result = UsageByMachine.newBuilder
   result.setResources(accumulateUsage(usage)).addAllComponents(usage).
          setStartTime(startTime).
+         setInfo(info).
          setEndTime(endTime).build
 }
 
@@ -149,6 +157,27 @@ def writeUsageByMachine(data: RDD[UsageByMachine]): Unit = {
   out[LzoUsageByMachineProtobufBlockOutputFormat, UsageByMachine](sc, data,
     outSan + "/sample" + RATE + "_usage_by_machine")
 }
+
+def getUsages(u: UsageByMachine, f: Resources => Float): (Float, Float, Float, Float, Float) = {
+  import scala.collection.JavaConversions._
+  val used = f(u.getResources)
+  val capacity = f(u.getInfo.getCapacity)
+  val uniqueComponetns = u.getComponentsList.map(x => 
+    (x.getTaskInfo.getJob.getId, x.getTaskInfo.getTaskIndex) -> x).toMap.values
+  val reserved =
+    uniqueComponents.map(x => f(x.getTaskInfo.getRequestedResources)).sum
+  val reservedHigh =
+    uniqueComponents.filter(_.getTaskInfo.getPriority > 8).map(
+      x => f(x.getTaskInfo.getRequestedResources)).sum
+  val usedHigh =
+    uniqueComponents.filter(_.getTaskInfo.getPriority > 8).map(
+      x => f(x.getResources)).sum
+  (used, capacity, reserved, reservedHigh, usedHigh)
+}
+
+def getUsagesString(x: (Float, Float, Float, Float, Float)) =
+  "used %s capacity %s reserved %s reservedHigh %s usedHigh %s".format(
+    x._1, x._2, x._3, x._4, x._5)
 
 /*
 val tasksByTask = tasks.map(keyByTask)
