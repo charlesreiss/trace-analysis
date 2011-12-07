@@ -15,15 +15,15 @@ message JobUtilization {
   optional Resources min_request = 4;
   optional Resources max_request = 5;
 
-  // overall usage
-  optional Resources max_usage = 6;
-  optional Resources max_mean_usage = 7;
-
   // percentile of percentile per-task usage
   repeated float task_percentile = 8;
   repeated float usage_percentile = 9;
-  optional Resources max_percentile_task_usage = 10;
-  optional Resources max_percentile_mean_task_usage = 11;
+  repeated Resources percentile_task_usage = 10;
+  repeated Resources percentile_mean_task_usage = 11;
+
+  optional int64 start_time = 12;
+  optional int64 end_time = 13;
+  optional int64 running_time = 14;
 }
 
 message TaskUtilization {
@@ -34,6 +34,11 @@ message TaskUtilization {
   optional Resources max_request = 4;
   
   repeated float usage_percentile = 5;
-  optional Resources precentile_task_usage = 6;
-  optional Resources precentile_mean_task_usage = 6;
+  repeated Resources percentile_task_usage = 6;
+  repeated Resources percentile_mean_task_usage = 7;
+
+  optional int64 start_time = 8;
+  optional int64 end_time = 9;
+  optional int64 running_time = 10;
+  // TODO runtime, etc.
 }
