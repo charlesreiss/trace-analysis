@@ -36,13 +36,14 @@ javaOptions++= Seq("-Djava.library.path=" +
     "-Dspark.cache.class=spark.BoundedMemoryCache",
     "-Dspark.diskSpillingCache.cacheDir=/itch/charles-tmp",
     "-Dspark.boundedMemoryCache.memoryFraction=0.10",
-    "-Dspark.default.parallelism=1000",
+    "-Dspark.default.parallelism=800",
     "-Dspark.local.dir=/scratch/charles-tmp",
     "-Dspark.kryo.registrator=edu.berkeley.cs.amplab.MyKryoRegistrator",
     "-Dspark.serializer=spark.KryoSerializer",
-    "-Dspark.kryoserializer.buffer.mb=50",
+    "-Dspark.kryoserializer.buffer.mb=120",
     "-Dcom.sun.management.jmxremote",
     "-Dspark.shuffle.fetcher=spark.ParallelShuffleFetcher",
+    "-Dspark.dfs.workDir=/work/charles/spark-dfs",
     "-Xmx3700m", "-Xms2000m") 
 
 mklauncherTask
