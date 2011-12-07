@@ -307,6 +307,49 @@ object Convert {
   }
   */
 
+  def broadcastPlaceJoined[@specialized RealKey, T, U](_into: RDD[T], values: RDD[U])
+      (implicit timeOfT: TimeOf[T], timeOfU: TimeOf[U],
+       insertU: Insert[T,U,RealKey],
+       km: ClassManifest[RealKey], tm: ClassManifest[T], um: ClassManifest[U])
+      : RDD[T] = {
+    type K = RealKey
+    val keyedValues: RDD[(K, U)] = values.map(u => insertU.keyU(u) -> u)
+    val keyedValuesGrouped = keyedValues.groupByKey(1).
+      mapValues(_.sortBy(x => timeOfU(x)))
+    val keyedValuesMap = keyedValuesGrouped.collect().toMap
+    val lookupTable = keyedValues.context.broadcast(keyedValuesMap)
+
+    val throughInto: RDD[T] =
+      if (insertU.hasThroughT)
+        _into.filter(t => insertU.throughT(t))
+      else
+        _into.context.makeRDD(Array[T]())
+    val into: RDD[T] =
+      if (insertU.hasThroughT)
+        _into.filter(t => !insertU.throughT(t))
+      else
+        _into
+    def matchT(t: T): T = {
+      val k = insertU.keyT(t)
+      val sortedU: Seq[U] = lookupTable.value.getOrElse(k, Seq.empty[U])
+      val uIterator = sortedU.iterator.buffered
+      var currentU: Option[U] = None
+      val currentTime = timeOfT(t)
+      while (uIterator.hasNext && currentTime >= timeOfU(uIterator.head)) {
+        currentU = Some(uIterator.next)
+      }
+      currentU match {
+      case Some(u) => insertU(t, u)
+      case None => t
+      }
+    }
+    val afterProcess = into.map(matchT)
+    if (insertU.hasThroughT)
+      afterProcess ++ throughInto
+    else
+      afterProcess
+  }
+
   def placeJoined[@specialized RealKey, T, U](_into: RDD[T], values: RDD[U])
       (implicit timeOfT: TimeOf[T], timeOfU: TimeOf[U],
        insertU: Insert[T,U,RealKey],

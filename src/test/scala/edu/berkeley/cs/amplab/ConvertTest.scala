@@ -50,4 +50,29 @@ class ConvertTestSuite extends FunSuite {
       "A1:B0", "A2:B0", "A3:B1", "nojoin", "tooearly", "through"
     ))
   }
+
+  test("broadcastPlaceJoined") {
+    import JoinTestingUtils._
+    val sc = new SparkContext("local", "test")
+    val join = broadcastPlaceJoined(sc.makeRDD(
+      Array(
+        A(0, 100, "tooearly"),
+        A(1, 100, "A1:"),
+        A(2, 100, "A2:"),
+        A(3, 101, "nojoin"),
+        A(4, 102, "A3:"),
+        A(5, -1, "through")
+      )
+    ), sc.makeRDD(
+      Array(
+        B(1, 100, "B0"),
+        B(1, 102, "B1"),
+        B(1, -1, "not in output")
+      )
+    ))
+    val results = join.collect().toList
+    assert(results.map(_.x).toSet === Set(
+      "A1:B0", "A2:B0", "A3:B1", "nojoin", "tooearly", "through"
+    ))
+  }
 }
