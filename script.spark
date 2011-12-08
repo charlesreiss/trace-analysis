@@ -1,10 +1,11 @@
-import edu.berkeley.cs.amplab.Convert._
-import edu.berkeley.cs.amplab.GoogleTrace._
+import amplab.googletrace.Convert._
+import amplab.googletrace.Join._
+import amplab.googletrace.GoogleTrace._
 import spark.RDD
 import spark.SparkContext
 
-import edu.berkeley.cs.amplab.mapreduce.input._
-import edu.berkeley.cs.amplab.mapreduce.output._
+import amplab.googletrace.mapreduce.input._
+import amplab.googletrace.mapreduce.output._
 import com.twitter.elephantbird.mapreduce.io.ProtobufWritable
 import org.apache.hadoop.io.LongWritable
 
@@ -16,31 +17,6 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 
-def _getSavedTasks(sc: SparkContext, inFile: String): RDD[TaskEvent] = 
-  inLzo[LongWritable, ProtobufWritable[TaskEvent],
-        LzoTaskEventProtobufBlockInputFormat](sc, inFile).
-  map(kv => kv._2.get)
-
-
-def _getSavedUsage(sc: SparkContext, inFile: String): RDD[TaskUsage] = 
-  inLzo[LongWritable, ProtobufWritable[TaskUsage],
-        LzoTaskUsageProtobufBlockInputFormat](sc, inFile).
-  map(kv => kv._2.get)
-
-def _getSavedMachines(sc: SparkContext, inFile: String): RDD[MachineEvent] = 
-  inLzo[LongWritable, ProtobufWritable[MachineEvent],
-        LzoMachineEventProtobufBlockInputFormat](sc, inFile).
-  map(kv => kv._2.get)
-
-def sampleMachinesFromUsage(rate: Int, data: RDD[TaskUsage]): RDD[TaskUsage] =
-  data.filter(_.getMachineInfo.getId % rate == 0)
-
-def sampleMachinesFromTasks(rate: Int, data: RDD[TaskEvent]): RDD[TaskEvent] =
-  data.filter(task =>
-    task.hasMachineInfo && task.getMachineInfo.getId % rate == 0)
-
-def sampleMachinesFromMachines(rate: Int, data: RDD[MachineEvent]): RDD[MachineEvent] = 
-  data.filter(m => m.getInfo.getId % rate == 0)
 
 /*
 def takeSchedules(t: TaskEvent): Boolean = t.getType == TaskEventType.SCHEDULE
@@ -81,17 +57,13 @@ val tasksC = placeJoined(tasks, machines)
 putTasks(sc, tasksC, outSan + "/all_tasks")
 
 val usageB = placeJoined(usage, tasksC)
-*/
 
 val usageC = broadcastPlaceJoined(usage, machines)
 
 putUsage(sc, usageC, outSan + "/all_usage_w_m")
+*/
 
 val RATE = 43
-val SMALL_SPLITS = 100 
-
-def reshard[T](splits: Int, data: RDD[T])(implicit tm: ClassManifest[T]): RDD[T] =
-  data.map(data => data.hashCode -> data).groupByKey(splits).flatMap(_._2)
 
 def writeSamples: (RDD[TaskEvent], RDD[TaskUsage]) = {
   val usageSample = reshard(SMALL_SPLITS,

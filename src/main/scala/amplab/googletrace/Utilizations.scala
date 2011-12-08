@@ -1,15 +1,15 @@
-package edu.berkeley.cs.amplab
+package amplab.googletrace
 
 import spark.SparkContext
 import spark.RDD
 import SparkContext._
 
 import Util._
-import GoogleTrace._
+import Protos._
 import TraceUtil._
 
-import edu.berkeley.cs.amplab.mapreduce.output._
-import edu.berkeley.cs.amplab.mapreduce.input._
+import amplab.googletrace.mapreduce.output._
+import amplab.googletrace.mapreduce.input._
 
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat}

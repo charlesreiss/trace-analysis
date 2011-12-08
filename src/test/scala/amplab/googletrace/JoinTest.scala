@@ -1,9 +1,10 @@
-package edu.berkeley.cs.amplab
+package amplab.googletrace
 
 import org.scalatest.FunSuite
 import spark.SparkContext
 
 import Convert._
+import Join._
 
 object JoinTestingUtils {
   case class A(t: Long, k: Int, x: String)

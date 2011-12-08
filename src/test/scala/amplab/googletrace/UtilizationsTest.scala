@@ -1,4 +1,4 @@
-package edu.berkeley.cs.amplab
+package amplab.googletrace
 
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
@@ -6,7 +6,7 @@ import spark.SparkContext
 
 import Utilizations._
 import TraceUtil._
-import GoogleTrace._
+import Protos._
 
 import scala.math.abs
 
@@ -234,5 +234,3 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
       getJobUtilization(Seq(taskUtilBuilder.build)))
   }
 }
-
-// vim: c_minlines=1000

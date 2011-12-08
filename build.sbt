@@ -38,11 +38,11 @@ javaOptions++= Seq("-Djava.library.path=" +
     "-Dspark.boundedMemoryCache.memoryFraction=0.10",
     "-Dspark.default.parallelism=800",
     "-Dspark.local.dir=/scratch/charles-tmp",
-    "-Dspark.kryo.registrator=edu.berkeley.cs.amplab.MyKryoRegistrator",
+    "-Dspark.kryo.registrator=amplab.googletrace.KryoRegistrator",
     "-Dspark.serializer=spark.KryoSerializer",
     "-Dspark.kryoserializer.buffer.mb=120",
     "-Dcom.sun.management.jmxremote",
-    "-Dspark.shuffle.fetcher=spark.ParallelShuffleFetcher",
+/*    "-Dspark.shuffle.fetcher=spark.ParallelShuffleFetcher", */
     "-Dspark.dfs.workDir=/work/charles/spark-dfs",
     "-Xmx3700m", "-Xms2000m") 
 

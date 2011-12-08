@@ -1,4 +1,4 @@
-package edu.berkeley.cs.amplab
+package amplab.googletrace
 
 import spark.SparkContext
 import spark.RDD
@@ -17,8 +17,8 @@ import org.apache.hadoop.mapreduce.TaskAttemptID
 import com.twitter.elephantbird.mapreduce.io.ProtobufWritable
 import com.twitter.elephantbird.util.TypeRef
 
-import edu.berkeley.cs.amplab.mapreduce.output._
-import edu.berkeley.cs.amplab.GoogleTrace._
+import amplab.googletrace.mapreduce.output._
+import Protos._
 
 import spark.SerializableWritable
 import java.text.SimpleDateFormat
@@ -30,6 +30,9 @@ import scala.collection.immutable.LongMap
 
 object Util {
   def min(x: Long, y: Long): Long = if (x < y) x else y
+
+  def reshard[T](splits: Int, data: RDD[T])(implicit tm: ClassManifest[T]): RDD[T] =
+    data.map(data => data.hashCode -> data).groupByKey(splits).flatMap(_._2)
 
   @inline
   def keyByTime[T, K](data: RDD[T], keyOf: T => K, timeOf: T => Long,

@@ -2,7 +2,7 @@
 //   all timestamps are normalized so they can be represented as signed longs,
 //   with values greater than LONG_MAX mapped to LONG_MAX
 
-package edu.berkeley.cs.amplab;
+package amplab.googletrace;
 
 import "trace.proto";
 
