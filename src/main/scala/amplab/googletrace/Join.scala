@@ -12,6 +12,10 @@ object Join {
   def keyByTask(taskEvent: TaskEvent): ((Long, Int), TaskEvent) =
     (taskEvent.getInfo.getJob.getId, taskEvent.getInfo.getTaskIndex) -> taskEvent
   
+  def keyByTask(usageEvent: TaskUsage): ((Long, Int), TaskUsage) =
+    (usageEvent.getTaskInfo.getJob.getId, usageEvent.getTaskInfo.getTaskIndex) ->
+      usageEvent
+  
   def keyByJob(taskEvent: TaskEvent): (Long, TaskEvent) =
     taskEvent.getInfo.getJob.getId -> taskEvent
 

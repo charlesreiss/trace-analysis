@@ -190,7 +190,7 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
       percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
 
       start_time: 0
-      end_time: 10
+      end_time: 20
       running_time: 10
     """, taskUtilBuilder)
     val jobUtilBuilder = JobUtilization.newBuilder
@@ -203,6 +203,12 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
       max_request: <
         cpus: 0.25 memory: 0.75
       >
+      task_samples: <
+        job: < id: 42 > task_index: 10
+        requested_resources: <
+          cpus: 0.25 memory: 0.75
+        >
+      >
 
       task_percentile: 0.5
       task_percentile: 0.99
@@ -229,6 +235,10 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
       percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
       percentile_task_usage: < cpus: 0.75 memory: 0.125 >
       percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
+
+      start_time: 0
+      end_time: 20
+      running_time: 10
     """, jobUtilBuilder)
     assert(jobUtilBuilder.build ===
       getJobUtilization(Seq(taskUtilBuilder.build)))
