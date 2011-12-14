@@ -124,9 +124,19 @@ object Utilizations {
 
     result.build
   }
+  
+  def findTaskUtilizations(tasks: RDD[TaskUsage]): RDD[TaskUtilization] = {
+    return tasks.map(keyByTask).groupByKey.
+        flatMap(kv => {
+          val u = getTaskUtilization(kv._2)
+          if (u.isEmpty)
+            None
+          else
+            Some(u.get)
+        })
+  }
 
   def findJobUtilizations(tasks: RDD[TaskUsage]): RDD[JobUtilization] = {
-    import Join._
     return tasks.map(keyByTask).groupByKey.
         flatMap(kv => {
           val u = getTaskUtilization(kv._2)
@@ -139,8 +149,51 @@ object Utilizations {
 
   def normalizeTime(t: Long): Long = t / (300 * 1000L * 1000L)
 
-  def keyUsageByMT(usage: TaskUsage): ((Long, Long), TaskUsage) = 
-    (usage.getMachineInfo.getId, normalizeTime(usage.getStartTime)) -> usage
+  def keyByJob(j: JobUtilization): (Long, JobUtilization) =
+    j.getJobInfo.getId -> j
+  
+  def keyByTask(t: TaskUtilization): ((Long, Int), TaskUtilization) =
+    (t.getInfo.getJob.getId -> t.getInfo.getTaskIndex, t)
+
+  def keyByTask(t: TaskUsage): ((Long, Int), TaskUsage) =
+    (t.getTaskInfo.getJob.getId -> t.getTaskInfo.getTaskIndex, t)
+
+  def combineUsage(usage: RDD[TaskUsage], 
+                   maybeTasks: Option[RDD[TaskUtilization]],
+                   maybeJobs: Option[RDD[JobUtilization]]): RDD[TaskUsageWithAvg] = {
+    val usageEncap = usage.map(u => TaskUsageWithAvg.newBuilder.setUsage(u).build)
+    val usageWithTasks = maybeTasks match {
+    case Some(tasks) => {
+      val tasksMap = usage.context.broadcast(tasks.map(keyByTask).collect.toMap)
+      usageEncap.map(u => {
+        val taskUtil = tasksMap.value.get(u.getUsage.getTaskInfo.getJob.getId ->
+                                          u.getUsage.getTaskInfo.getTaskIndex)
+        val builder = TaskUsageWithAvg.newBuilder.mergeFrom(u)
+        taskUtil.foreach(builder.setTask _)
+        builder.build
+      })
+    }
+    case None => usageEncap
+    }
+    val usageWithJobs = maybeJobs match {
+    case Some(jobs) => {
+      val jobsMap = usage.context.broadcast(jobs.map(keyByJob).collect.toMap)
+      usageWithTasks.map(u => {
+        val jobUtil = jobsMap.value.get(u.getUsage.getTaskInfo.getJob.getId)
+        val builder = TaskUsageWithAvg.newBuilder.mergeFrom(u)
+        jobUtil.foreach(builder.setJob _)
+        builder.build
+      })
+    }
+    case None => usageWithTasks
+    }
+
+    usageWithJobs
+  }
+
+  def keyUsageByMT(usage: TaskUsageWithAvg): ((Long, Long), TaskUsageWithAvg) = 
+    (usage.getUsage.getMachineInfo.getId,
+     normalizeTime(usage.getUsage.getStartTime)) -> usage
 
   def accumulateUsage(usage: Seq[TaskUsage]): Resources = {
     def usageKey(u: TaskUsage): (Long, Int) =
@@ -156,22 +209,27 @@ object Utilizations {
     Resources.newBuilder.setCpus(cpu.asInstanceOf[Float]).setMemory(mem.asInstanceOf[Float]).build
   }
 
-  def toUsageByMachine(usage: Seq[TaskUsage]): UsageByMachine = {
+  def toUsageByMachine(usage: Seq[TaskUsageWithAvg]): UsageByMachine = {
     import scala.collection.JavaConversions._
-    val startTime = usage.map(_.getStartTime).min
-    val endTime = usage.map(_.getEndTime).max
-    val info = usage.head.getMachineInfo
-    val totalUsage = accumulateUsage(usage)
+    val startTime = usage.map(_.getUsage.getStartTime).min
+    val endTime = usage.map(_.getUsage.getEndTime).max
+    val info = usage.head.getUsage.getMachineInfo
+    val totalUsage = accumulateUsage(usage.map(_.getUsage))
     val result = UsageByMachine.newBuilder
-    result.setResources(accumulateUsage(usage)).addAllComponents(usage).
+    result.setResources(accumulateUsage(usage.map(_.getUsage))).
+           addAllComponentsWithAvg(usage).
            setStartTime(startTime).
            setInfo(info).
            setEndTime(endTime).build
   }
 
-  def computeUsageByMachine(usage: RDD[TaskUsage]): RDD[UsageByMachine] = {
+  def computeUsageByMachine(usage: RDD[TaskUsageWithAvg]): RDD[UsageByMachine] = {
     usage.map(keyUsageByMT).groupByKey.mapValues(toUsageByMachine).
           map(kv => kv._2)
+  }
+  
+  def computeUsageByMachineU(usage: RDD[TaskUsage]): RDD[UsageByMachine] = {
+    computeUsageByMachine(combineUsage(usage, None, None))
   }
 
   def writeUsageByMachine(sc: SparkContext, rate: Int, data: RDD[UsageByMachine]): Unit = {
@@ -180,11 +238,19 @@ object Utilizations {
       outSan + "/sample" + rate + "_usage_by_machine")
   }
 
+  def findComponents(u: UsageByMachine): Seq[TaskUsage] = {
+    import scala.collection.JavaConversions._
+    if (u.getComponentsCount > 0)
+      u.getComponentsList
+    else
+      u.getComponentsWithAvgList.map(_.getUsage)
+  }
+
   def getUsages(u: UsageByMachine, f: Resources => Float): (Float, Float, Float, Float, Float) = {
     import scala.collection.JavaConversions._
     val used = f(u.getResources)
     val capacity = f(u.getInfo.getCapacity)
-    val uniqueComponents = u.getComponentsList.map(x => 
+    val uniqueComponents = findComponents(u).map(x => 
       (x.getTaskInfo.getJob.getId, x.getTaskInfo.getTaskIndex) -> x).toMap.values
     val reserved =
       uniqueComponents.map(x => f(x.getTaskInfo.getRequestedResources)).sum

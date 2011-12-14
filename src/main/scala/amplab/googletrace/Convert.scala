@@ -123,7 +123,8 @@ object Convert {
     data.map(x => (x, Nil)).groupByKey(2000).map(_._1)
 
   def in[T <: Message](sc: SparkContext, convert: Array[String] => T,
-                       inDir: String, isBig: Boolean = true)(implicit fm: ClassManifest[T]): RDD[T] = {
+                       inDir: String, isBig: Boolean = true)(
+                       implicit fm: ClassManifest[T]): RDD[T] = {
     val _lines = sc.textFile(inDir + "/*?????-of-?????.csv*")
     val lines = if (isBig) reshardStrings(_lines) else _lines
     val records = lines.map(COMMA.split(_, -1))

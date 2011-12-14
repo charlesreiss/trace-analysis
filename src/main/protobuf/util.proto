@@ -26,6 +26,18 @@ message JobUtilization {
   optional int64 running_time = 14;
 }
 
+message UsageByMachine {
+  required int64 start_time = 1;
+  required int64 end_time = 2;
+
+  repeated TaskUsage components = 3;
+  repeated TaskUsageWithAvg components_with_avg = 6;
+  
+  optional Resources resources = 4;
+  optional MachineInfo info = 5;
+  // Next available number: 7
+}
+
 message TaskUtilization {
   required TaskInfo info = 1;
   repeated TaskInfo task_samples = 2;
@@ -41,4 +53,10 @@ message TaskUtilization {
   optional int64 end_time = 9;
   optional int64 running_time = 10;
   // TODO runtime, etc.
+}
+
+message TaskUsageWithAvg {
+  optional TaskUsage usage = 1;
+  optional TaskUtilization task = 2;
+  optional JobUtilization job = 3;
 }

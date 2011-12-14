@@ -1,6 +1,7 @@
 package amplab.googletrace
 
 import Protos._
+import TraceUtil._
 
 import spark.SparkContext
 import spark.RDD
@@ -108,6 +109,22 @@ object Join {
       }
       def keyT(t: TaskUsage) = t.getMachineInfo.getId
       def keyU(u: MachineEvent) = u.getInfo.getId
+    }
+
+  implicit def insertJobInJobUtilization: Insert[JobUtilization, JobEvent, Long] =
+    new Insert[JobUtilization, JobEvent, Long] {
+      def apply(into: JobUtilization, value: JobEvent): JobUtilization = {
+        val builder = into.toBuilder
+        builder.getJobInfoBuilder.mergeFrom(value.getInfo)
+        return builder.build
+      }
+      def keyT(t: JobUtilization) = t.getJobInfo.getId
+      def keyU(u: JobEvent) = u.getInfo.getId
+    }
+
+  implicit def timeOfJobForJoin: TimeOf[JobUtilization] =
+    new TimeOf[JobUtilization] {
+      def apply(value: JobUtilization): Long = value.getEndTime
     }
 
   val TIME_PERIOD = 1000L * 1000L * 60L * 60L
