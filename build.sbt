@@ -20,7 +20,8 @@ libraryDependencies ++= Seq(
   "log4j" % "log4j" % "1.2.16",
   "org.spark-project" %% "spark-core" % "0.4-SNAPSHOT",
   "org.spark-project" %% "spark-repl" % "0.4-SNAPSHOT",
-  "org.scalatest" %% "scalatest" % "1.6.1" % "test"
+  "org.scalatest" %% "scalatest" % "1.6.1" % "test",
+  "org.apache.commons" % "commons-math" % "2.2"
 )
 
 testOptions in Test += Tests.Argument("-oDF")
@@ -29,21 +30,14 @@ protoc in PB.protobufConfig := "./protoc --plugin=protoc-gen-twadoop=./protoc-ge
 
 fork in run := true
 
-javaOptions++= Seq("-Djava.library.path=" +
-    System.getProperty("java.library.path") + ":./native-lib",
+javaOptions ++= Seq("-Djava.library.path=" +
+    System.getProperty("java.library.path") + ":./native-lib-" +
+    System.getProperty("os.name") + "-" + System.getProperty("os.arch"),
     "-Dspark.home=./spark-home",
-    "-Dspark.mem=3000m",
     "-Dspark.cache.class=spark.BoundedMemoryCache",
-    "-Dspark.diskSpillingCache.cacheDir=/itch/charles-tmp",
-    "-Dspark.boundedMemoryCache.memoryFraction=0.10",
-    "-Dspark.default.parallelism=800",
-    "-Dspark.local.dir=/scratch/charles-tmp",
     "-Dspark.kryo.registrator=amplab.googletrace.KryoRegistrator",
     "-Dspark.serializer=spark.KryoSerializer",
-    "-Dspark.kryoserializer.buffer.mb=120",
-    "-Dcom.sun.management.jmxremote",
-/*    "-Dspark.shuffle.fetcher=spark.ParallelShuffleFetcher", */
-    "-Dspark.dfs.workDir=/work/charles/spark-dfs",
-    "-Xmx3700m", "-Xms2000m") 
+    "-Dspark.kryoserializer.buffer.mb=175",
+    "-Dcom.sun.management.jmxremote")
 
 mklauncherTask
