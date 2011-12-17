@@ -30,7 +30,7 @@ object Sample {
     data.filter(_.getTaskInfo.getJob.getId % rate == 0)
 
   def sampleFile(rate: Int, name: String): String =
-    outSan + "/sample" + rate + "_" + name
+    outDir + "/sample" + rate + "_" + name
 
   def usageShardsFor(rate: Int) = 2000 / rate
   def tasksShardsFor(rate: Int) = 250 / rate

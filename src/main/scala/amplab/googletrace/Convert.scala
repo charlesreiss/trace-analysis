@@ -119,6 +119,8 @@ object Convert {
 
   val COMMA = java.util.regex.Pattern.compile(",")
 
+  // FIXME: hack to avoid any shard being too big to fit in memory on
+  // some rather constrained nodes.
   def reshardStrings(data: RDD[String]): RDD[String] =
     data.map(x => (x, Nil)).groupByKey(2000).map(_._1)
 
@@ -164,15 +166,4 @@ object Convert {
     write[F, T](out, data)
   } 
 
-  def putTasks(sc: SparkContext, data: RDD[TaskEvent], outFile: String): Unit = {
-    out[LzoTaskEventProtobufBlockOutputFormat, TaskEvent](sc, data, outFile)
-  }
-  
-  def putUsage(sc: SparkContext, data: RDD[TaskUsage], outFile: String): Unit = {
-    out[LzoTaskUsageProtobufBlockOutputFormat, TaskUsage](sc, data, outFile)
-  }
-  
-  def putMachines(sc: SparkContext, data: RDD[MachineEvent], outFile: String): Unit = {
-    out[LzoMachineEventProtobufBlockOutputFormat, MachineEvent](sc, data, outFile)
-  }
 }
