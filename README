@@ -1,3 +1,12 @@
+What is this?
+
+  Tools for converting the Google trace to LZO compressed protobuf files
+  (for which Twitter's Elephant Bird has Hadoop input/output formats).
+  
+  Some tools for doing possibly interesting joins of that data in Spark.
+
+  The ability to run an interactive spark shell against the trace data.
+
 To build:
 
   Dependencies: 
