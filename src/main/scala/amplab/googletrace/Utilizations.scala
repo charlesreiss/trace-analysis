@@ -235,7 +235,7 @@ object Utilizations {
   def writeUsageByMachine(sc: SparkContext, rate: Int, data: RDD[UsageByMachine]): Unit = {
     import Stored._
     out[LzoUsageByMachineProtobufBlockOutputFormat, UsageByMachine](sc, data,
-      outSan + "/sample" + rate + "_usage_by_machine")
+      outDir + "/sample" + rate + "_usage_by_machine")
   }
 
   def findComponents(u: UsageByMachine): Seq[TaskUsage] = {

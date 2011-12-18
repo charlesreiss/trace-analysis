@@ -13,8 +13,8 @@ import spark.RDD
 import SparkContext._
 
 object Stored {
-  var inDir = "/work/charles/clustertrace3"
-  var outSan = "/work/charles/clustertrace-resharded"
+  var inDir = System.getProperty("trace.in.directory")
+  var outDir = System.getProperty("trace.processed.directory")
 
   def readSavedTasks(sc: SparkContext, inFile: String): RDD[TaskEvent] = 
     inLzo[LongWritable, ProtobufWritable[TaskEvent],
@@ -31,12 +31,33 @@ object Stored {
           LzoMachineEventProtobufBlockInputFormat](sc, inFile).
     map(kv => kv._2.get)
 
+  def readSavedJobs(sc: SparkContext, inFile: String): RDD[JobEvent] = 
+    inLzo[LongWritable, ProtobufWritable[JobEvent],
+          LzoJobEventProtobufBlockInputFormat](sc, inFile).
+    map(kv => kv._2.get)
+
   def getTasks(sc: SparkContext): RDD[TaskEvent] = 
     readSavedTasks(sc, outSan + "/all_tasks_marked")
   def getUsage(sc: SparkContext): RDD[TaskUsage] =
-    readSavedUsage(sc, outSan + "/all_usage_w_m")
+    readSavedUsage(sc, outDir + "/all_usage_w_m")
   def getMachines(sc: SparkContext): RDD[MachineEvent] =
-    readSavedMachines(sc, outSan + "/machine_events")
+    readSavedMachines(sc, outDir + "/machine_events")
   def getJobs(sc: SparkContext): RDD[JobEvent] =
     in(sc, convertJobEvent, inDir + "/job_events", false)
+
+  def putJobs(sc: SparkContext, data: RDD[JobEvent], outFile: String): Unit = {
+    out[LzoJobEventProtobufBlockOutputFormat, JobEvent](sc, data, outFile)
+  }
+  
+  def putTasks(sc: SparkContext, data: RDD[TaskEvent], outFile: String): Unit = {
+    out[LzoTaskEventProtobufBlockOutputFormat, TaskEvent](sc, data, outFile)
+  }
+  
+  def putUsage(sc: SparkContext, data: RDD[TaskUsage], outFile: String): Unit = {
+    out[LzoTaskUsageProtobufBlockOutputFormat, TaskUsage](sc, data, outFile)
+  }
+  
+  def putMachines(sc: SparkContext, data: RDD[MachineEvent], outFile: String): Unit = {
+    out[LzoMachineEventProtobufBlockOutputFormat, MachineEvent](sc, data, outFile)
+  }
 }

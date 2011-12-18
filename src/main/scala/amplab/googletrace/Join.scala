@@ -127,15 +127,29 @@ object Join {
       def apply(value: JobUtilization): Long = value.getEndTime
     }
 
-  val TIME_PERIOD = 1000L * 1000L * 60L * 60L
+  val TIME_PERIOD = 1000L * 1000L * 60L * 20L
   val MAX_TIME = 1000L * 1000L * 60L * 60L * 24L * 30L
 
-  /*
-  def placeJoinedBig[@specialized RealKey, T, U <: Message](into: RDD[T], values: RDD[U])
+  /* time division version of placeJoined to avoid shards of death at the
+     cost of an extra shuffle and a bunch of extra copies of records that
+     cross the time divisions */
+  def placeJoinedBig[RealKey, T, U](_into: RDD[T], values: RDD[U])
       (implicit timeOfT: TimeOf[T], timeOfU: TimeOf[U],
        insertU: Insert[T,U,RealKey],
        km: ClassManifest[RealKey], tm: ClassManifest[T], um: ClassManifest[U])
       : RDD[T] = {
+    import Util.keyByTime
+    import Util.partitionByTime
+    val throughInto: RDD[T] =
+      if (insertU.hasThroughT)
+        _into.filter(t => insertU.throughT(t))
+      else
+        _into.context.makeRDD(Array[T]())
+    val into: RDD[T] =
+      if (insertU.hasThroughT)
+        _into.filter(t => !insertU.throughT(t))
+      else
+        _into
     type K = (Int, RealKey)
     val keyedInto: RDD[(K, T)] =
       keyByTime(into, insertU.keyT _, timeOfT, TIME_PERIOD, MAX_TIME)
@@ -162,9 +176,12 @@ object Join {
       }
       return result
     }
-    return grouped.flatMap(processGroup)
+    val afterProcess = grouped.flatMap(processGroup)
+    if (insertU.hasThroughT)
+      afterProcess ++ throughInto
+    else
+      afterProcess
   }
-  */
 
   def broadcastPlaceJoined[@specialized RealKey, T, U](_into: RDD[T], values: RDD[U])
       (implicit timeOfT: TimeOf[T], timeOfU: TimeOf[U],
