@@ -15,9 +15,9 @@ To build:
   The only mandatory piece is specifying the directories. You can use HDFS
   paths.
 
-  sbt test mklauncher
+  Copy and customize spark-home/spark-executor.
 
-  Fix spark-home/spark-executor.
+  sbt test mklauncher
 
 To run:
 

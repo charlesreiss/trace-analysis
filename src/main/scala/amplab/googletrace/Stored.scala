@@ -31,6 +31,11 @@ object Stored {
           LzoMachineEventProtobufBlockInputFormat](sc, inFile).
     map(kv => kv._2.get)
 
+  def readSavedJobs(sc: SparkContext, inFile: String): RDD[JobEvent] = 
+    inLzo[LongWritable, ProtobufWritable[JobEvent],
+          LzoJobEventProtobufBlockInputFormat](sc, inFile).
+    map(kv => kv._2.get)
+
   def getTasks(sc: SparkContext): RDD[TaskEvent] = 
     readSavedTasks(sc, outDir + "/all_tasks")
   def getUsage(sc: SparkContext): RDD[TaskUsage] =

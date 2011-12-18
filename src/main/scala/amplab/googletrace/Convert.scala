@@ -122,7 +122,7 @@ object Convert {
   // FIXME: hack to avoid any shard being too big to fit in memory on
   // some rather constrained nodes.
   def reshardStrings(data: RDD[String]): RDD[String] =
-    data.map(x => (x, Nil)).groupByKey(2000).map(_._1)
+    data.map(x => (x, Nil)).groupByKey(600).map(_._1)
 
   def in[T <: Message](sc: SparkContext, convert: Array[String] => T,
                        inDir: String, isBig: Boolean = true)(

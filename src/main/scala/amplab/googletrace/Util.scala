@@ -49,43 +49,35 @@ object Util {
    * (b) for each key k, the last record from a prior time period (if any)
    */
   @inline
-  def partitionByTime[T <: Message, @specialized K](
+  def partitionByTime[T, @specialized K](
       data: RDD[T], keyOf: T => K, timeOf: T => Long,
       lessThan: (T, T) => Boolean, timePeriod: Long, maxTime: Long)
       (implicit km: ClassManifest[K], tm: ClassManifest[T]):
         RDD[((Int, K), T)] = {
-    type ShortT = (Long, Array[Byte])
-    def toShortT(t: T): ShortT =
-      timeOf(t) -> t.toByteArray
     val template = data.first
-    def toNormalT(t: ShortT): T =
-      template.newBuilderForType.mergeFrom(t._2).build.asInstanceOf[T]
     val lastPeriod = (maxTime / timePeriod).asInstanceOf[Int]
-    def timePeriodOf(t: ShortT): Int = 
-      min(t._1 / timePeriod, lastPeriod).asInstanceOf[Int]
     def timePeriodOfT(t: T): Int = 
       min(timeOf(t) / timePeriod, lastPeriod).asInstanceOf[Int]
     val originalByPeriod =
-      data.map(t => (timePeriodOfT(t), keyOf(t)) -> toShortT(t)).cache
-    def latest(t1: ShortT, t2: ShortT): ShortT  = 
-      if (t1._1 < t2._1)
+      data.map(t => (timePeriodOfT(t), keyOf(t)) -> t)
+    def latest(t1: T, t2: T): T = 
+      if (timeOf(t1) < timeOf(t2))
         t2
       else
         t1
-    def earliest(t1: ShortT, t2: ShortT): ShortT  = 
-      if (t1._1 < t2._1)
+    def earliest(t1: T, t2: T): T = 
+      if (timeOf(t1) < timeOf(t2))
         t1
       else
         t2
-    def broadcastLater(kv: ((Int, K), ShortT)): Seq[((Int, K), ShortT)] = 
+    def broadcastLater(kv: ((Int, K), T)): Seq[((Int, K), T)] = 
       ((kv._1._1 + 1) to lastPeriod).map(period => (period, kv._1._2) -> kv._2)
-    def fixTriplet(in: (K, (ShortT, Int))): ((Int, K), ShortT) =
+    def fixTriplet(in: (K, (T, Int))): ((Int, K), T) =
       (in._2._2, in._1) -> in._2._1
     /* the reduceByKey() should just be an optimization. */
     val earliers = originalByPeriod.reduceByKey(latest).
-      flatMap(broadcastLater).reduceByKey(earliest)
-    val asShort = originalByPeriod ++ earliers
-    asShort.mapValues(toNormalT)
+      flatMap(broadcastLater).reduceByKey(latest)
+    originalByPeriod ++ earliers
   }
 
   def writeHadoop[F <: OutputFormat[K, V], K, V](

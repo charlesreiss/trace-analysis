@@ -34,7 +34,6 @@ javaOptions ++= Seq("-Djava.library.path=" +
     System.getProperty("java.library.path") + ":./native-lib-" +
     System.getProperty("os.name") + "-" + System.getProperty("os.arch"),
     "-Dspark.home=./spark-home",
-    "-Dspark.cache.class=spark.BoundedMemoryCache",
     "-Dspark.kryo.registrator=amplab.googletrace.KryoRegistrator",
     "-Dspark.serializer=spark.KryoSerializer",
     "-Dspark.kryoserializer.buffer.mb=175",
