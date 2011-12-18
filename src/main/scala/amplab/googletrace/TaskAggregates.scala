@@ -50,7 +50,22 @@ object TaskAggregates {
   }
 
   def getTaskInfoSamples(inEvents: RDD[TaskEvent]): RDD[(Long, Seq[TaskInfo])] = {
-    assert(false)
-    null
+    import Join.keyByTask
+
+    inEvents.map(keyByTask).groupByKey.mapValues(_.head).map(
+      kv => kv._1._1 -> kv._2.getInfo).groupByKey
+  }
+  
+  def markJobUtilization(inJobs: RDD[JobUtilization],
+                         inEvents: RDD[TaskEvent]): RDD[JobUtilization] = {
+    val infos = getTaskInfoSamples(inEvents)
+    def mergeJob(kv: (JobUtilization, Seq[TaskInfo])): JobUtilization = {
+      import scala.collection.JavaConversions._
+      val builder = kv._1.toBuilder
+      builder.clearTaskSamples.addAllTaskSamples(kv._2)
+      builder.build
+    }
+    inJobs.map(j => j.getJobInfo.getId -> j).join(infos).
+        map(_._2).map(mergeJob)
   }
 }

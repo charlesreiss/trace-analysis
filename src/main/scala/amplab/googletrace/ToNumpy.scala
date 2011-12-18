@@ -55,6 +55,7 @@ object ToNumpy {
   import TraceUtil._
   lazy val jobUtilizationConverter: Converter[JobUtilization] = {
     def getValues(t: JobUtilization): (Array[String], Array[Float]) = {
+      import scala.collection.JavaConversions._
       (
         Array[String](
           t.getJobInfo.getName,
@@ -82,6 +83,11 @@ object ToNumpy {
                     t.getPercentileTaskUsage(i).getMemory,
                     t.getPercentileMeanTaskUsage(i).getCpus,
                     t.getPercentileMeanTaskUsage(i).getMemory)
+        ) ++ (0 to 8).map(
+          i => t.getTaskSamplesList.map(_.getNumEventsByType(i)).sum.floatValue
+        ) ++ List(
+          t.getTaskSamplesList.map(_.getNumMissing).sum.floatValue,
+          t.getTaskSamplesList.map(_.getNumEvents).sum.floatValue
         )
       )
     }
@@ -98,7 +104,9 @@ object ToNumpy {
               "t99_pt50", "t99_pt90", "t99_pt99", "t99_ptmax",
               "tmax_pt50", "tmax_pt90", "tmax_pt99", "tmax_ptmax").flatMap(
       n => List("max_cpus", "max_mem", "mean_cpu", "mean_mem").map(n + "_" + _)
-    )
+    ) ++ List("num_submit", "num_schedule", "num_evict", "num_fail",
+              "num_finish", "num_kill", "num_lost", "num_update_pending",
+              "num_update_running", "num_missing", "num_events")
     converter(getValues, (stringNames, floatNames))
   }
 }

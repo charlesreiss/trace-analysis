@@ -36,7 +36,7 @@ javaOptions++= Seq("-Djava.library.path=" +
     "-Dspark.cache.class=spark.BoundedMemoryCache",
     "-Dspark.diskSpillingCache.cacheDir=/itch/charles-tmp",
     "-Dspark.boundedMemoryCache.memoryFraction=0.10",
-    "-Dspark.default.parallelism=800",
+    "-Dspark.default.parallelism=1500",
     "-Dspark.local.dir=/scratch/charles-tmp",
     "-Dspark.kryo.registrator=amplab.googletrace.KryoRegistrator",
     "-Dspark.serializer=spark.KryoSerializer",

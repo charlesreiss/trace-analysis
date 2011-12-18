@@ -20,14 +20,16 @@ class KryoRegistrator extends spark.KryoRegistrator {
 
 object KryoRegistrator {
   val tlBuffer = new java.lang.ThreadLocal[Array[Byte]] {
-    override def initialValue: Array[Byte] = new Array[Byte](1024 * 128)
+    override def initialValue: Array[Byte] = new Array[Byte](1024 * 1024 * 128)
   }
   abstract class PBSerialize[T <: Message] extends KSerializer {
     override final def writeObjectData(buf: ByteBuffer, _obj: AnyRef) {
       val obj = _obj.asInstanceOf[T]
       val tempBuf = tlBuffer.get
-      obj.writeTo(CodedOutputStream.newInstance(tempBuf))
+      val codedOut = CodedOutputStream.newInstance(tempBuf)
+      obj.writeTo(codedOut)
       val len = obj.getSerializedSize
+      assert(len == tempBuf.size - codedOut.spaceLeft)
       buf.putInt(obj.getSerializedSize)
       buf.put(tempBuf, 0, len)
     }
@@ -74,8 +76,13 @@ object KryoRegistrator {
       final override def parseFrom(in: CodedInputStream) =
           JobUtilization.parseFrom(in)
     })
+    kyro.register(classOf[TaskInfo], new PBSerialize[TaskInfo] {
+      final override def parseFrom(in: CodedInputStream) =
+          TaskInfo.parseFrom(in)
+    })
     for (cls <- List(classOf[Array[TaskUsage]], classOf[Array[TaskEvent]],
-                     classOf[Array[JobEvent]], classOf[Array[MachineEvent]])) {
+                     classOf[Array[JobEvent]], classOf[Array[MachineEvent]],
+                     classOf[Array[TaskInfo]], classOf[Array[JobUtilization]])) {
       kyro.register(cls, new DeflateCompressor(new ArraySerializer(kyro)))
     }
   }
