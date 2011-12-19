@@ -37,7 +37,7 @@ object Stored {
     map(kv => kv._2.get)
 
   def getTasks(sc: SparkContext): RDD[TaskEvent] = 
-    readSavedTasks(sc, outSan + "/all_tasks_marked")
+    readSavedTasks(sc, outDir + "/all_tasks_marked")
   def getUsage(sc: SparkContext): RDD[TaskUsage] =
     readSavedUsage(sc, outDir + "/all_usage_w_m")
   def getMachines(sc: SparkContext): RDD[MachineEvent] =
