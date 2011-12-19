@@ -2,6 +2,7 @@ package amplab.googletrace
 
 import Convert._
 import Protos._
+import TraceUtil._
 
 import amplab.googletrace.mapreduce.input._
 import amplab.googletrace.mapreduce.output._
@@ -36,6 +37,11 @@ object Stored {
           LzoJobEventProtobufBlockInputFormat](sc, inFile).
     map(kv => kv._2.get)
 
+  def readSavedJobUtilizations(sc: SparkContext, inFile: String): RDD[JobUtilization] = 
+    inLzo[LongWritable, ProtobufWritable[JobUtilization],
+          LzoJobUtilizationProtobufBlockInputFormat](sc, inFile).
+    map(kv => kv._2.get)
+
   def putJobs(sc: SparkContext, data: RDD[JobEvent], outFile: String): Unit = {
     out[LzoJobEventProtobufBlockOutputFormat, JobEvent](sc, data, outFile)
   }
@@ -50,5 +56,9 @@ object Stored {
   
   def putMachines(sc: SparkContext, data: RDD[MachineEvent], outFile: String): Unit = {
     out[LzoMachineEventProtobufBlockOutputFormat, MachineEvent](sc, data, outFile)
+  }
+
+  def putJobUtilizations(sc: SparkContext, data: RDD[JobUtilization], outFile: String): Unit = {
+    out[LzoJobUtilizationProtobufBlockOutputFormat, JobUtilization](sc, data, outFile)
   }
 }
