@@ -1,16 +1,22 @@
 package amplab.googletrace
 
 import java.io.{DataOutput, DataOutputStream, FileOutputStream}
+import spark.RDD
 
 object ToNumpy {
-  trait Converter[T] {
+  trait Converter[T] extends Serializable {
     def writeNumpy(path: String, data: Array[T]): Unit
+    def writeNumpy(path: String, data: RDD[T])(implicit cm: ClassManifest[T]): Unit = {
+      /* XXX here and elsewhere we rely on this running from exactly one
+         worker */
+      Util.reshard(1, data).glom.foreach(writeNumpy(path, _))
+    }
   }
 
   def converter[T](
     getValues: T => (Array[String], Array[Float]),
     fieldNames: (Array[String], Array[String])
-  ): Converter[T] = {
+  )(implicit cm: ClassManifest[T]): Converter[T] = {
     return new Converter[T] {
       val namesString =
           "[%s]".format(
@@ -21,7 +27,7 @@ object ToNumpy {
            List.fill(fieldNames._2.size)("'>f4'")).mkString(",")
       val dtypeString =
           "{'names':%s,'formats':[%s]}".format(namesString, typesString)
-      def writeLine(t: T, out: DataOutput): Unit = {
+      final def writeLine(t: T, out: DataOutput): Unit = {
         val (strings, floats) = getValues(t)
         assert(strings.size == fieldNames._1.size)
         assert(floats.size == fieldNames._2.size)
@@ -34,20 +40,45 @@ object ToNumpy {
           out.writeFloat(f)
         }
       }
-          
-      override def writeNumpy(path: String, data: Array[T]): Unit = {
+
+      final def toRawBytes(data: Array[T]): Array[Byte] = {
+        val byteOut = new java.io.ByteArrayOutputStream
+        val out = new DataOutputStream(byteOut)
+        data.foreach(writeLine(_, out))
+        val result = byteOut.toByteArray
+        out.close
+        result
+      }
+
+      final def writeHeader(out: DataOutput, size: Long): Unit = {
         val metaString = 
             "{'descr':%s,'fortran_order':False,'shape':(%d,)}\n".format(
-              dtypeString, data.size
+              dtypeString, size
             )
-        val out = new DataOutputStream(new FileOutputStream(path))
         out.writeBytes("\u0093NUMPY\u0001\u0000")
         val metaLen = metaString.size
         out.writeByte(metaLen % 256)
         out.writeByte(metaLen / 256)
         out.writeBytes(metaString)
+      }
+          
+      override final def writeNumpy(path: String, data: Array[T]): Unit = {
+        val out = new DataOutputStream(new FileOutputStream(path))
+        writeHeader(out, data.size)
         data.foreach(writeLine(_, out))
         out.close
+      }
+
+      override final def writeNumpy(path: String, data: RDD[T])(implicit cm: ClassManifest[T]): Unit = {
+        val size = data.count
+        Util.reshard(1, data.glom.map(toRawBytes(_))).glom.foreach(
+          byteArrays => {
+            val out = new DataOutputStream(new FileOutputStream(path))
+            writeHeader(out, size)
+            byteArrays.foreach(out.write(_))
+            out.close
+          }
+        )
       }
     }
   }
