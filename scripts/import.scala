@@ -4,6 +4,7 @@ import amplab.googletrace.Stored._
 import amplab.googletrace.Utilizations._
 import amplab.googletrace.Protos._
 import amplab.googletrace.Util._
+import amplab.googletrace.TaskAggregates._
 
 import spark.RDD
 import spark.SparkContext
@@ -24,7 +25,10 @@ putTasks(sc, rawTasks, outDir + "/tasks_unjoined")
 putUsage(sc, rawUsage, outDir + "/usage_unjoined")
 putMachines(sc, rawMachines, outDir + "/machines_unjoined")
 
-val tasksWithJobs = placeJoined(rawTasks, rawJobs)
+val markedTasks = markTasks(rawTasks)
+putTasks(sc, rawTasks, outDir + "/tasks_marked")
+
+val tasksWithJobs = placeJoined(markedTasks, rawJobs)
 putTasks(sc, tasksWithJobs, outDir + "/tasks_with_jobs")
 
 val tasksWithMachines = broadcastPlaceJoined(tasksWithJobs, rawMachines)
