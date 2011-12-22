@@ -58,7 +58,7 @@ message TaskInfo {
   optional Resources requested_resources = 7;
   optional bool different_machines = 8;
  
-  // If filled in, value at index /i/ is the number of events of type i :w
+  // If filled in, value at index /i/ is the number of events of type i
   repeated int32 num_events_by_type = 11;
   // Last status of task
   optional TaskEventType final_event = 12;
