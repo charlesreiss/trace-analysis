@@ -1,5 +1,3 @@
-resolvers += Resolver.file("included-plugins",
-file("/home/eecs/charles/trace-analysis/plugin-lib"))(
-  Patterns("[artifact]-[revision].[ext]"))
+resolvers += "gseitz@github" at "http://gseitz.github.com/maven/"
 
-addSbtPlugin("com.github.gseitz" % "sbt-protobuf" % "0.2")
+addSbtPlugin("com.github.gseitz" % "sbt-protobuf" % "0.2.2")
