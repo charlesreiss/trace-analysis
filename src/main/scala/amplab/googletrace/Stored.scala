@@ -61,4 +61,18 @@ object Stored {
   def putJobUtilizations(sc: SparkContext, data: RDD[JobUtilization], outFile: String): Unit = {
     out[LzoJobUtilizationProtobufBlockOutputFormat, JobUtilization](sc, data, outFile)
   }
+
+  def putTaskUtilizations(sc: SparkContext, data: RDD[TaskUtilization], outFile: String): Unit = {
+    out[LzoTaskUtilizationProtobufBlockOutputFormat, TaskUtilization](sc, data, outFile)
+  }
+
+  def putUsageByMachine(sc: SparkContext, data: RDD[UsageByMachine], outFile: String): Unit = {
+    out[LzoUsageByMachineProtobufBlockOutputFormat, UsageByMachine](sc, data,
+      outFile)
+  }
+
+  def putTaskUsageWithAvg(sc: SparkContext, data: RDD[TaskUsageWithAvg], outFile: String): Unit = {
+    out[LzoTaskUsageWithAvgProtobufBlockOutputFormat, TaskUsageWithAvg](sc, data,
+      outFile)
+  }
 }

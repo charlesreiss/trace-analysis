@@ -82,7 +82,8 @@ object KryoRegistrator {
     })
     for (cls <- List(classOf[Array[TaskUsage]], classOf[Array[TaskEvent]],
                      classOf[Array[JobEvent]], classOf[Array[MachineEvent]],
-                     classOf[Array[TaskInfo]], classOf[Array[JobUtilization]])) {
+                     classOf[Array[TaskInfo]], classOf[Array[JobUtilization]],
+                     classOf[Array[TaskUtilization]])) {
       kyro.register(cls, new DeflateCompressor(new ArraySerializer(kyro)))
     }
   }
