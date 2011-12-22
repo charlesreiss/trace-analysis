@@ -13,29 +13,36 @@ import scala.math.abs
 import com.google.protobuf.TextFormat
 
 class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
-  test("getPercentile on 1 element") {
-    val single = Array(42.0f)
+  test("getPercentile on 1 elements") {
+    val single = preparePercentileList(
+      Array(42.0f -> 100.0f)
+    )
     assert(42.0f === getPercentile(0.0, single))
     assert(42.0f === getPercentile(1.0, single))
     assert(42.0f === getPercentile(0.5, single))
     assert(42.0f === getPercentile(0.3, single))
   }
 
-  test("getPercentile on 2 elements") {
-    val two = Array(0.0f, 2.0f)  // getPercentile assumes sortedness
-    assert(0.0f === getPercentile(0.0, two))
-    assert(2.0f === getPercentile(1.0, two))
-    assert(1.0f === getPercentile(0.5, two))
-    abs(0.6f - getPercentile(0.3, two)) should be < (1e-4f)
+  test("getPercentile example 1") {
+    val single = preparePercentileList(
+      Array(42.0f -> 100.0f, 43.0f -> 50.0f, 41.0f -> 50.0f)
+    )
+    assert(41.0f === getPercentile(0.0, single))
+    assert(43.0f === getPercentile(1.0, single))
+    assert(42.0f === getPercentile(0.6, single))
+    assert(42.0f === getPercentile(0.5, single))
+    assert(41.0f === getPercentile(0.2, single))
   }
 
-  test("getPercentile on 3 elements") {
-    val three = Array(0.0f, 2.0f, 5.0f)
+  test("getPercentile example 2") {
+    val three = preparePercentileList(
+      Array(0.0f -> 25.0f, 2.0f -> 50.0f, 5.0f -> 100.0f)
+    )
     assert(0.0f === getPercentile(0.0, three))
     assert(5.0f === getPercentile(1.0, three))
-    assert(2.0f === getPercentile(0.5, three))
-    abs(3.5f - getPercentile(0.75, three)) should be < (1e-4f)
-    abs(1.0f - getPercentile(0.25, three)) should be < (1e-4f)
+    assert(5.0f === getPercentile(0.5, three))
+    assert(2.0f === getPercentile(0.25, three))
+    assert(0.0f === getPercentile(0.10, three))
   }
 
   test("getTaskUtilization missing request") {
@@ -152,13 +159,17 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
       running_time: 30
     """, expectUtilBuilder)
     for (percentile <- PER_TASK_PERCENTILES) {
-      def f(d: Double) = d.asInstanceOf[Float]
+      def f(d1: Float, d2: Float): Float =
+        if (percentile <= 2.0/3.0)
+          d1
+        else
+          d2
       expectUtilBuilder.addPercentileTaskUsage(
-        Resources.newBuilder.setCpus(f(1.0 + percentile)).
-          setMemory(f(1.0 + percentile))
+        Resources.newBuilder.setCpus(2.0f).
+          setMemory(2.0f)
       ).addPercentileMeanTaskUsage(
-        Resources.newBuilder.setCpus(f(0.25 + percentile / 4.0)).
-          setMemory(f(0.125 + percentile / 8.0))
+        Resources.newBuilder.setCpus(f(0.25f, 0.5f)).
+          setMemory(f(0.125f, 0.25f))
       )
     }
     assert(Some(expectUtilBuilder.build) ===
@@ -173,6 +184,10 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
         requested_resources: <
           cpus: 0.25 memory: 0.75
         >
+        final_event: SCHEDULE
+        num_events_by_type: 1 num_events_by_type: 2 num_events_by_type: 3
+        num_events_by_type: 4 num_events_by_type: 5 num_events_by_type: 6
+        num_events_by_type: 7 num_events_by_type: 8 num_events_by_type: 9
       >
 
       min_request: <
@@ -203,12 +218,6 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
       max_request: <
         cpus: 0.25 memory: 0.75
       >
-      task_samples: <
-        job: < id: 42 > task_index: 10
-        requested_resources: <
-          cpus: 0.25 memory: 0.75
-        >
-      >
 
       task_percentile: 0.5
       task_percentile: 0.99
@@ -239,6 +248,14 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
       start_time: 0
       end_time: 20
       running_time: 10
+
+      num_tasks_final: 0 num_tasks_final: 1 num_tasks_final: 0
+      num_tasks_final: 0 num_tasks_final: 0 num_tasks_final: 0
+      num_tasks_final: 0 num_tasks_final: 0 num_tasks_final: 0
+
+      num_events_by_type: 1 num_events_by_type: 2 num_events_by_type: 3
+      num_events_by_type: 4 num_events_by_type: 5 num_events_by_type: 6
+      num_events_by_type: 7 num_events_by_type: 8 num_events_by_type: 9
     """, jobUtilBuilder)
     assert(jobUtilBuilder.build ===
       getJobUtilization(Seq(taskUtilBuilder.build)))

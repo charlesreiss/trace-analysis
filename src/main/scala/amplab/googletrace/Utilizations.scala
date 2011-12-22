@@ -7,7 +7,6 @@ import SparkContext._
 import Util._
 import Protos._
 import TraceUtil._
-import Convert._ // for out*
 
 import amplab.googletrace.mapreduce.output._
 import amplab.googletrace.mapreduce.input._
@@ -25,18 +24,30 @@ import com.twitter.elephantbird.mapreduce.io.ProtobufWritable
 
 import com.google.protobuf.Message
 
+import scala.collection.SortedMap
+
 object Utilizations {
-  // TODO(Charles Reiss): weight by length of measurements.
-  def getPercentile(p: Double, s: IndexedSeq[Float]): Float = {
-    val place = ((s.size - 1) * p)
-    val low = s(place.floor.asInstanceOf[Int])
-    val high = s(place.ceil.asInstanceOf[Int])
-    val offset = place - place.floor
-    return (low * (1.0 - offset) + high * offset).asInstanceOf[Float]
+  /* (value, weight) --> Map[partial sum of weight -> value] */
+  def preparePercentileList(unsortedS: Seq[(Float, Float)]): SortedMap[Float, Float] = {
+    val s = unsortedS.sortBy(_._1)
+    val weightSums = s.map(_._2).scanLeft(0f)(_ + _).tail
+    SortedMap(weightSums.zip(s.map(_._1)): _*)
+  }
+
+  def getPercentile(p: Double, s: SortedMap[Float, Float]): Float = {
+    val place = (s.last._1 * p).asInstanceOf[Float]
+    (s.to(place).lastOption, s.from(place).firstOption) match {
+    case (Some((lowOffset, low)), None) => low
+    case (_, Some((highOffset, high))) => high
+    case (None, None) => throw new Error("getPercentileWeighted on nothing")
+    }
   }
 
   val PER_TASK_PERCENTILES = List(0.5, 0.9, 0.99, 1.0)
   val JOB_PERCENTILES = List(0.5, 0.99, 1.0)
+
+  def getWeight(u: TaskUsage): Float =
+    u.getEndTime - u.getStartTime / (300f * 1000f * 1000f)
 
   def getTaskUtilization(usage: Seq[TaskUsage]): Option[TaskUtilization] = {
     val result = TaskUtilization.newBuilder
@@ -61,10 +72,18 @@ object Utilizations {
     minReqBuilder.setMemory(taskInfos.map(_.getRequestedResources.getMemory).min)
     maxReqBuilder.setMemory(taskInfos.map(_.getRequestedResources.getMemory).max)
 
-    val maxCpus = usage.map(_.getMaxResources.getCpus).sorted.toIndexedSeq
-    val maxMemory = usage.map(_.getMaxResources.getMemory).sorted.toIndexedSeq
-    val cpus = usage.map(_.getResources.getCpus).sorted.toIndexedSeq
-    val memory = usage.map(_.getResources.getMemory).sorted.toIndexedSeq
+    val maxCpus = preparePercentileList(
+        usage.map(u => u.getMaxResources.getCpus -> getWeight(u))
+      )
+    val maxMemory = preparePercentileList(
+        usage.map(u => u.getMaxResources.getMemory -> getWeight(u))
+      )
+    val cpus = preparePercentileList(
+        usage.map(u => u.getResources.getCpus -> getWeight(u))
+      )
+    val memory = preparePercentileList(
+        usage.map(u => u.getResources.getMemory -> getWeight(u))
+      )
 
     for (percentile <- PER_TASK_PERCENTILES) {
       val meanUsage = Resources.newBuilder.
@@ -90,7 +109,13 @@ object Utilizations {
     result.setJobInfo(firstTask.getInfo.getJob)
     val numTasks = tasks.groupBy(_.getInfo.getTaskIndex).size
     result.setNumTasks(numTasks)
-    result.addTaskSamples(firstTask.getInfo)
+
+    (0 to 8).map {
+      case i =>
+        result.addNumTasksFinal(
+          tasks.filter(_.getInfo.getFinalEvent.getNumber == i).size)
+        result.addNumEventsByType(tasks.map(_.getInfo.getNumEventsByType(i)).sum)
+    }
 
     val minReqBuilder = result.getMinRequestBuilder
     val maxReqBuilder = result.getMaxRequestBuilder
@@ -101,10 +126,18 @@ object Utilizations {
 
     val percentiles = firstTask.getUsagePercentileList
     for ((p, i) <- percentiles.zipWithIndex) {
-      val maxCpus = tasks.map(_.getPercentileTaskUsage(i).getCpus).sorted.toIndexedSeq
-      val maxMemory = tasks.map(_.getPercentileTaskUsage(i).getMemory).sorted.toIndexedSeq
-      val cpus = tasks.map(_.getPercentileMeanTaskUsage(i).getCpus).sorted.toIndexedSeq
-      val memory = tasks.map(_.getPercentileMeanTaskUsage(i).getMemory).sorted.toIndexedSeq
+      val maxCpus = preparePercentileList(
+          tasks.map(t => t.getPercentileTaskUsage(i).getCpus -> 1f)
+        )
+      val maxMemory = preparePercentileList(
+          tasks.map(t => t.getPercentileTaskUsage(i).getMemory -> 1f)
+        )
+      val cpus = preparePercentileList(
+          tasks.map(t => t.getPercentileMeanTaskUsage(i).getCpus -> 1f)
+        )
+      val memory = preparePercentileList(
+          tasks.map(t => t.getPercentileMeanTaskUsage(i).getMemory -> 1f)
+        )
 
       for (p2 <- JOB_PERCENTILES) {
         result.addTaskPercentile(p2.asInstanceOf[Float]).
@@ -136,6 +169,11 @@ object Utilizations {
         })
   }
 
+
+  def findJobUtilizationsFromTasks(tasks: RDD[TaskUtilization]): RDD[JobUtilization] = {
+    return tasks.map(keyByTask).groupByKey.map(kv => getJobUtilization(kv._2))
+  }
+
   def findJobUtilizations(tasks: RDD[TaskUsage]): RDD[JobUtilization] = {
     return tasks.map(keyByTask).groupByKey.
         flatMap(kv => {
@@ -147,16 +185,27 @@ object Utilizations {
         }).groupByKey.map(kv => getJobUtilization(kv._2))
   }
 
-  def normalizeTime(t: Long): Long = t / (300 * 1000L * 1000L)
+  private val MINUTE = 60L * 1000L * 1000L
+  private val DAY = 24 * 60 * MINUTE
+
+  private def normalizeTime(t: Long): Long = t / (5 * MINUTE)
+  private def normalizeTimeDaily(t: Long): Long = (t % DAY) / (5 * MINUTE)
 
   def keyByJob(j: JobUtilization): (Long, JobUtilization) =
     j.getJobInfo.getId -> j
+  
+  def keyByJob(t: TaskUsageWithAvg): (Long, TaskUsageWithAvg) =
+    (t.getUsage.getTaskInfo.getJob.getId, t)
   
   def keyByTask(t: TaskUtilization): ((Long, Int), TaskUtilization) =
     (t.getInfo.getJob.getId -> t.getInfo.getTaskIndex, t)
 
   def keyByTask(t: TaskUsage): ((Long, Int), TaskUsage) =
     (t.getTaskInfo.getJob.getId -> t.getTaskInfo.getTaskIndex, t)
+  
+  def keyByTask(t: TaskUsageWithAvg): ((Long, Int), TaskUsageWithAvg) =
+    (t.getUsage.getTaskInfo.getJob.getId -> t.getUsage.getTaskInfo.getTaskIndex,
+     t)
 
   def combineUsage(usage: RDD[TaskUsage], 
                    maybeTasks: Option[RDD[TaskUtilization]],
@@ -164,26 +213,21 @@ object Utilizations {
     val usageEncap = usage.map(u => TaskUsageWithAvg.newBuilder.setUsage(u).build)
     val usageWithTasks = maybeTasks match {
     case Some(tasks) => {
-      val tasksMap = usage.context.broadcast(tasks.map(keyByTask).collect.toMap)
-      usageEncap.map(u => {
-        val taskUtil = tasksMap.value.get(u.getUsage.getTaskInfo.getJob.getId ->
-                                          u.getUsage.getTaskInfo.getTaskIndex)
-        val builder = TaskUsageWithAvg.newBuilder.mergeFrom(u)
-        taskUtil.foreach(builder.setTask _)
-        builder.build
-      })
+      usageEncap.map(keyByTask).join(tasks.map(keyByTask)).map {
+        case (ignoredKey, (usage, task)) => {
+          usage.toBuilder.setTask(task).build
+        }
+      }
     }
     case None => usageEncap
     }
     val usageWithJobs = maybeJobs match {
     case Some(jobs) => {
-      val jobsMap = usage.context.broadcast(jobs.map(keyByJob).collect.toMap)
-      usageWithTasks.map(u => {
-        val jobUtil = jobsMap.value.get(u.getUsage.getTaskInfo.getJob.getId)
-        val builder = TaskUsageWithAvg.newBuilder.mergeFrom(u)
-        jobUtil.foreach(builder.setJob _)
-        builder.build
-      })
+      usageWithTasks.map(keyByJob).join(jobs.map(keyByJob)).map {
+        case (ignoredKey, (usage, job)) => {
+          usage.toBuilder.setJob(job).build
+        }
+      }
     }
     case None => usageWithTasks
     }
@@ -191,9 +235,45 @@ object Utilizations {
     usageWithJobs
   }
 
+  def combineUsageWithDeaths(usageWithAvg: RDD[TaskUsageWithAvg],
+                             events: RDD[TaskEvent]): RDD[TaskUsageWithAvg] = {
+    val deaths = events.filter(e => 
+      e.getType != TaskEventType.SUBMIT &&
+      e.getType != TaskEventType.SCHEDULE &&
+      e.getType != TaskEventType.UPDATE_PENDING &&
+      e.getType != TaskEventType.UPDATE_RUNNING)
+    val deathsByKey = deaths.map(Join.keyByTask)
+    val usageByKey = usageWithAvg.map(keyByTask)
+    def applyDeaths(pair: (Seq[TaskUsageWithAvg], Seq[TaskEvent])): Seq[TaskUsageWithAvg]= {
+      val events = pair._2.sortBy(_.getTime)
+      val usages = pair._1.sortBy(_.getUsage.getStartTime)
+
+      val eventIter = events.iterator.buffered
+
+      var nextDeath = if (eventIter.hasNext) Some(eventIter.next) else None
+      val results = scala.collection.mutable.Buffer.empty[TaskUsageWithAvg]
+      for (usage <- usages) {
+        while (nextDeath.isDefined && usage.getUsage.getStartTime > nextDeath.get.getTime) {
+          nextDeath = if (eventIter.hasNext) Some(eventIter.next) else None
+          nextDeath match {
+          case Some(death) => results += usage.toBuilder.setNextDeath(death).build
+          case None => results += usage
+          }
+        }
+      }
+      results
+    }
+    usageByKey.groupWith(deathsByKey).flatMap(kv => applyDeaths(kv._2))
+  }
+
+
   def keyUsageByMT(usage: TaskUsageWithAvg): ((Long, Long), TaskUsageWithAvg) = 
     (usage.getUsage.getMachineInfo.getId,
      normalizeTime(usage.getUsage.getStartTime)) -> usage
+
+  def keyUsageByMTDaily(usage: TaskUsageWithAvg): ((Long, Long), TaskUsageWithAvg) = 
+    (usage.getUsage.getMachineInfo.getId,
+     normalizeTimeDaily(usage.getUsage.getStartTime)) -> usage
 
   def accumulateUsage(usage: Seq[TaskUsage]): Resources = {
     def usageKey(u: TaskUsage): (Long, Int) =
@@ -227,15 +307,14 @@ object Utilizations {
     usage.map(keyUsageByMT).groupByKey.mapValues(toUsageByMachine).
           map(kv => kv._2)
   }
+
+  def computeUsageByMachineDaily(usage: RDD[TaskUsageWithAvg]): RDD[UsageByMachine] = {
+    usage.map(keyUsageByMTDaily).groupByKey.mapValues(toUsageByMachine).
+          map(kv => kv._2)
+  }
   
   def computeUsageByMachineU(usage: RDD[TaskUsage]): RDD[UsageByMachine] = {
     computeUsageByMachine(combineUsage(usage, None, None))
-  }
-
-  def writeUsageByMachine(sc: SparkContext, rate: Int, data: RDD[UsageByMachine]): Unit = {
-    import Stored._
-    out[LzoUsageByMachineProtobufBlockOutputFormat, UsageByMachine](sc, data,
-      outDir + "/sample" + rate + "_usage_by_machine")
   }
 
   def findComponents(u: UsageByMachine): Seq[TaskUsage] = {
@@ -266,4 +345,18 @@ object Utilizations {
   def getUsagesString(x: (Float, Float, Float, Float, Float)) =
     "used %s capacity %s reserved %s reservedHigh %s usedHigh %s".format(
       x._1, x._2, x._3, x._4, x._5)
+
+  def makeUtilizations(inEvents: RDD[TaskEvent], inUsage: RDD[TaskUsage]):
+      (RDD[JobUtilization], RDD[TaskUtilization],
+       RDD[TaskUsageWithAvg], RDD[UsageByMachine],
+       RDD[UsageByMachine]) = {
+    val taskUtils = findTaskUtilizations(inUsage).cache
+    val jobUtils = findJobUtilizationsFromTasks(taskUtils).cache
+    val usageWithAvg = combineUsageWithDeaths(
+        combineUsage(inUsage, Some(taskUtils), Some(jobUtils)),
+        inEvents)
+    val usageByMachine = computeUsageByMachine(usageWithAvg)
+    val usageByMachineDaily = computeUsageByMachineDaily(usageWithAvg)
+    (jobUtils, taskUtils, usageWithAvg, usageByMachine, usageByMachineDaily)
+  }
 }

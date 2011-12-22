@@ -24,6 +24,9 @@ message JobUtilization {
   optional int64 start_time = 12;
   optional int64 end_time = 13;
   optional int64 running_time = 14;
+
+  repeated int32 num_tasks_final = 15;
+  repeated int32 num_events_by_type = 16;
 }
 
 message UsageByMachine {
@@ -59,4 +62,6 @@ message TaskUsageWithAvg {
   optional TaskUsage usage = 1;
   optional TaskUtilization task = 2;
   optional JobUtilization job = 3;
+
+  optional TaskEvent next_death = 4;
 }
