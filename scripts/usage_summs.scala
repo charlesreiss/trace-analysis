@@ -18,10 +18,10 @@ val (jobUtil, taskUtil, taskUsageWAvg, uByM, uByMDaily) =
     makeUtilizations(tasks, usage)
 
 def writeTaskUtils: Unit = {
-  putTaskUtilizations(sc, taskUtil, outDir + "/task_utils")
+  putTaskUtilizations(sc, reshard(8, taskUtil), outDir + "/task_utils")
 }
 def writeJobUtils: Unit = {
-  putJobUtilizations(sc, jobUtil, outDir + "/job_utils_with_tasks")
+  putJobUtilizations(sc, reshard(2, jobUtil), outDir + "/job_utils_with_tasks")
 }
 def writeTaskUsageWAvg: Unit = {
   putTaskUsageWithAvg(sc, taskUsageWAvg, outDir + "/task_usage_w_avg")
@@ -91,3 +91,13 @@ def writePriorities: Unit = {
   writePriority("mem_res_time_prio", priorityMemoryReservation)
 }
 
+
+def doRun: Unit = {
+    jobUtil.cache
+    taskUtil.cache
+    writeTaskUtils
+    writeJobUtils
+    writeTaskUsageWAvg
+    writeUsageByMachineWAvg
+    writePriorities
+}
