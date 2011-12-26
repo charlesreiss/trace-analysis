@@ -52,13 +52,13 @@ object Utilizations {
   def getTaskUtilization(usage: Seq[TaskUsage]): Option[TaskUtilization] = {
     val result = TaskUtilization.newBuilder
     val firstUsage = usage.head
-    result.setInfo(firstUsage.getTaskInfo)
 
     val taskInfos =
       usage.filter(u => u.hasTaskInfo && u.getTaskInfo.hasRequestedResources).
-            map(_.getTaskInfo)
+            map(_.getTaskInfo).toBuffer
     if (taskInfos.size == 0)
       return None
+    result.setInfo(taskInfos.head)
 
     result.setStartTime(usage.map(_.getStartTime).min).
            setEndTime(usage.map(_.getEndTime).max).
@@ -255,10 +255,10 @@ object Utilizations {
       for (usage <- usages) {
         while (nextDeath.isDefined && usage.getUsage.getStartTime > nextDeath.get.getTime) {
           nextDeath = if (eventIter.hasNext) Some(eventIter.next) else None
-          nextDeath match {
-          case Some(death) => results += usage.toBuilder.setNextDeath(death).build
-          case None => results += usage
-          }
+        }
+        nextDeath match {
+        case Some(death) => results += usage.toBuilder.setNextDeath(death).build
+        case None => results += usage
         }
       }
       results
