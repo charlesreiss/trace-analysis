@@ -36,7 +36,7 @@ javaOptions ++= Seq("-Djava.library.path=" +
     "-Dspark.home=./spark-home",
     "-Dspark.kryo.registrator=amplab.googletrace.KryoRegistrator",
     "-Dspark.serializer=spark.KryoSerializer",
-    "-Dspark.kryoserializer.buffer.mb=175",
+    "-Dspark.kryoserializer.buffer.mb=200",
     "-Dcom.sun.management.jmxremote")
 
 mklauncherTask
