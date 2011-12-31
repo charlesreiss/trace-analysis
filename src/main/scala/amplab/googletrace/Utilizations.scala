@@ -43,11 +43,11 @@ object Utilizations {
     }
   }
 
-  val PER_TASK_PERCENTILES = List(0.5, 0.9, 0.99, 1.0)
-  val JOB_PERCENTILES = List(0.5, 0.99, 1.0)
+  val PER_TASK_PERCENTILES = List(0.01, 0.25, 0.5, 0.75, 0.99, 1.0)
+  val JOB_PERCENTILES = List(0.01, 0.25, 0.5, 0.75, 0.99, 1.0)
 
   def getWeight(u: TaskUsage): Float =
-    u.getEndTime - u.getStartTime / (300f * 1000f * 1000f)
+    (u.getEndTime - u.getStartTime) / (300f * 1000f * 1000f)
 
   def getTaskUtilization(usage: Seq[TaskUsage]): Option[TaskUtilization] = {
     val result = TaskUtilization.newBuilder
@@ -110,6 +110,8 @@ object Utilizations {
     val numTasks = tasks.groupBy(_.getInfo.getTaskIndex).size
     result.setNumTasks(numTasks)
 
+    result.addTaskSamples(firstTask.getInfo)
+
     (0 to 8).map {
       case i =>
         result.addNumTasksFinal(
@@ -171,7 +173,7 @@ object Utilizations {
 
 
   def findJobUtilizationsFromTasks(tasks: RDD[TaskUtilization]): RDD[JobUtilization] = {
-    return tasks.map(keyByTask).groupByKey.map(kv => getJobUtilization(kv._2))
+    return tasks.map(keyByJob).groupByKey.map(kv => getJobUtilization(kv._2))
   }
 
   def findJobUtilizations(tasks: RDD[TaskUsage]): RDD[JobUtilization] = {
@@ -196,6 +198,9 @@ object Utilizations {
   
   def keyByJob(t: TaskUsageWithAvg): (Long, TaskUsageWithAvg) =
     (t.getUsage.getTaskInfo.getJob.getId, t)
+
+  def keyByJob(t: TaskUtilization): (Long, TaskUtilization) =
+    (t.getInfo.getJob.getId, t)
   
   def keyByTask(t: TaskUtilization): ((Long, Int), TaskUtilization) =
     (t.getInfo.getJob.getId -> t.getInfo.getTaskIndex, t)

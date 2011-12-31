@@ -45,6 +45,16 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
     assert(0.0f === getPercentile(0.10, three))
   }
 
+  test("getPercentile example 3") {
+    val three = preparePercentileList(
+      Array(0.0f -> 25.0f, 2.0f -> 50.0f)
+    )
+    assert(0.0f === getPercentile(0.0, three))
+    assert(2.0f === getPercentile(1.0, three))
+    assert(0.0f === getPercentile(0.25, three))
+    assert(2.0f === getPercentile(0.40, three))
+  }
+
   test("getTaskUtilization missing request") {
     val usageBuilder = TaskUsage.newBuilder
     TextFormat.merge("""
@@ -86,14 +96,20 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
         cpus: 0.25 memory: 0.75
       >
       
+      usage_percentile: 0.01
+      usage_percentile: 0.25
       usage_percentile: 0.5
-      usage_percentile: 0.9
+      usage_percentile: 0.75
       usage_percentile: 0.99
       usage_percentile: 1.0
       percentile_task_usage: < cpus: 0.75 memory: 0.125 >
       percentile_task_usage: < cpus: 0.75 memory: 0.125 >
       percentile_task_usage: < cpus: 0.75 memory: 0.125 >
       percentile_task_usage: < cpus: 0.75 memory: 0.125 >
+      percentile_task_usage: < cpus: 0.75 memory: 0.125 >
+      percentile_task_usage: < cpus: 0.75 memory: 0.125 >
+      percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
+      percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
       percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
       percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
       percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
@@ -148,9 +164,11 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
       max_request: <
         cpus: 0.5 memory: 0.75
       >
-      
+     
+      usage_percentile: 0.01
+      usage_percentile: 0.25 
       usage_percentile: 0.5
-      usage_percentile: 0.9
+      usage_percentile: 0.75
       usage_percentile: 0.99
       usage_percentile: 1.0
 
@@ -164,9 +182,14 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
           d1
         else
           d2
+      def g(d1: Float, d2: Float): Float =
+        if (percentile <= 1.0/3.0)
+          d1
+        else
+          d2
       expectUtilBuilder.addPercentileTaskUsage(
-        Resources.newBuilder.setCpus(2.0f).
-          setMemory(2.0f)
+        Resources.newBuilder.setCpus(g(1.0f, 2.0f)).
+          setMemory(g(1.0f, 2.0f))
       ).addPercentileMeanTaskUsage(
         Resources.newBuilder.setCpus(f(0.25f, 0.5f)).
           setMemory(f(0.125f, 0.25f))
@@ -219,18 +242,36 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
         cpus: 0.25 memory: 0.75
       >
 
+      task_percentile: 0.01
+      task_percentile: 0.25
       task_percentile: 0.5
+      task_percentile: 0.75
       task_percentile: 0.99
       task_percentile: 1.0
+      task_percentile: 0.01
+      task_percentile: 0.25
       task_percentile: 0.5
+      task_percentile: 0.75
       task_percentile: 0.99
       task_percentile: 1.0
       usage_percentile: 0.5
       usage_percentile: 0.5
       usage_percentile: 0.5
+      usage_percentile: 0.5
+      usage_percentile: 0.5
+      usage_percentile: 0.5
       usage_percentile: 1.0
       usage_percentile: 1.0
       usage_percentile: 1.0
+      usage_percentile: 1.0
+      usage_percentile: 1.0
+      usage_percentile: 1.0
+      percentile_task_usage: < cpus: 1.0 memory: 0.125 >
+      percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
+      percentile_task_usage: < cpus: 1.0 memory: 0.125 >
+      percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
+      percentile_task_usage: < cpus: 1.0 memory: 0.125 >
+      percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
       percentile_task_usage: < cpus: 1.0 memory: 0.125 >
       percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
       percentile_task_usage: < cpus: 1.0 memory: 0.125 >
@@ -238,6 +279,12 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
       percentile_task_usage: < cpus: 1.0 memory: 0.125 >
       percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
 
+      percentile_task_usage: < cpus: 0.75 memory: 0.125 >
+      percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
+      percentile_task_usage: < cpus: 0.75 memory: 0.125 >
+      percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
+      percentile_task_usage: < cpus: 0.75 memory: 0.125 >
+      percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
       percentile_task_usage: < cpus: 0.75 memory: 0.125 >
       percentile_mean_task_usage: < cpus: 0.5 memory: 0.25 >
       percentile_task_usage: < cpus: 0.75 memory: 0.125 >
@@ -257,6 +304,7 @@ class UtilizationsTestSuite extends FunSuite with ShouldMatchers {
       num_events_by_type: 4 num_events_by_type: 5 num_events_by_type: 6
       num_events_by_type: 7 num_events_by_type: 8 num_events_by_type: 9
     """, jobUtilBuilder)
+    jobUtilBuilder.addTaskSamples(taskUtilBuilder.getInfo)
     assert(jobUtilBuilder.build ===
       getJobUtilization(Seq(taskUtilBuilder.build)))
   }

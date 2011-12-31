@@ -41,6 +41,11 @@ object Stored {
     inLzo[LongWritable, ProtobufWritable[JobUtilization],
           LzoJobUtilizationProtobufBlockInputFormat](sc, inFile).
     map(kv => kv._2.get)
+  
+  def readSavedTaskUtilizations(sc: SparkContext, inFile: String): RDD[TaskUtilization] = 
+    inLzo[LongWritable, ProtobufWritable[TaskUtilization],
+          LzoTaskUtilizationProtobufBlockInputFormat](sc, inFile).
+    map(kv => kv._2.get)
 
   def putJobs(sc: SparkContext, data: RDD[JobEvent], outFile: String): Unit = {
     out[LzoJobEventProtobufBlockOutputFormat, JobEvent](sc, data, outFile)

@@ -84,9 +84,22 @@ object ToNumpy {
   }
 
   import TraceUtil._
-  lazy val jobUtilizationConverter: Converter[JobUtilization] = {
+  def jobUtilizationConverter(sample: JobUtilization):
+      Converter[JobUtilization] = {
+    import scala.collection.JavaConversions._
+    def percentileString(f: Float): String = {
+      if (f == 1.0)
+        return "max"
+      else
+        return "%d".format((f * 100.0).asInstanceOf[Int])
+    }
+    val percentileTypes =
+      sample.getTaskPercentileList.zip(sample.getUsagePercentileList).map {
+        case (taskPer, usagePer) => "t%s_pt%s".format(
+          percentileString(taskPer), percentileString(usagePer)
+        )
+      }
     def getValues(t: JobUtilization): (Array[String], Array[Float]) = {
-      import scala.collection.JavaConversions._
       (
         Array[String](
           t.getJobInfo.getName,
@@ -109,13 +122,15 @@ object ToNumpy {
           t.getMinRequest.getMemory,
           t.getMaxRequest.getCpus,
           t.getMaxRequest.getMemory 
-        ) ++ (0 to 11).flatMap(
+        ) ++ percentileTypes.indices.flatMap(
           i => List(t.getPercentileTaskUsage(i).getCpus,
                     t.getPercentileTaskUsage(i).getMemory,
                     t.getPercentileMeanTaskUsage(i).getCpus,
                     t.getPercentileMeanTaskUsage(i).getMemory)
         ) ++ (0 to 8).map(
-          i => t.getTaskSamplesList.map(_.getNumEventsByType(i)).sum.floatValue
+          i => t.getNumEventsByType(i).floatValue
+        ) ++ (0 to 8).map(
+          i => t.getNumTasksFinal(i).floatValue
         ) ++ List(
           t.getTaskSamplesList.map(_.getNumMissing).sum.floatValue,
           t.getTaskSamplesList.map(_.getNumEvents).sum.floatValue
@@ -131,13 +146,14 @@ object ToNumpy {
         "num_tasks",
         "min_req_cpus", "min_req_memory",
         "max_req_cpus", "max_req_memory" 
-    ) ++ List("t50_pt50", "t50_pt90", "t50_pt99", "t50_ptmax",
-              "t99_pt50", "t99_pt90", "t99_pt99", "t99_ptmax",
-              "tmax_pt50", "tmax_pt90", "tmax_pt99", "tmax_ptmax").flatMap(
+    ) ++ percentileTypes.flatMap(
       n => List("max_cpus", "max_mem", "mean_cpu", "mean_mem").map(n + "_" + _)
     ) ++ List("num_submit", "num_schedule", "num_evict", "num_fail",
               "num_finish", "num_kill", "num_lost", "num_update_pending",
-              "num_update_running", "num_missing", "num_events")
+              "num_update_running"
+    ) ++ List("num_final_submit", "num_final_schedule", "num_final_evict", "num_final_fail",
+              "num_final_finish", "num_final_kill", "num_final_lost", "num_final_update_pending",
+              "num_final_update_running", "num_missing", "num_events")
     converter(getValues, (stringNames, floatNames))
   }
 }
